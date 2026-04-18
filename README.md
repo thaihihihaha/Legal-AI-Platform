@@ -1,6 +1,6 @@
 # ⚖️ Trợ lý Pháp lý AI (Node.js/React Edition)
 
-## Status (April 16, 2026)
+## Status (April 16, 2026).
 
 MVP hiện tại đã chạy end-to-end theo các phase triển khai gần nhất:
 
