@@ -10,10 +10,12 @@ import legalRoutes from './routes/legal.js';
 import settingsRoutes from './routes/settings.js';
 import integrationRoutes from './routes/integration.js';
 import templateRoutes from './routes/templates.js';
+import adminRoutes from './routes/admin.js';
 import { initAI, getAIStatus } from './agents/legal_agent.js';
 import { initPinecone, getPineconeStatus } from './services/pinecone.js';
 import { validateEnv, getCorsOrigins } from './config/env.js';
 import { requireAuth } from './middleware/auth.js';
+import { requireSuperAdmin, requireActive } from './middleware/requireRole.js';
 import { getPrismaHealth } from './lib/prisma.js';
 import { ensureMvpTables } from './lib/bootstrap.js';
 import { UPLOAD_DIR } from './config/storage.js';
@@ -38,14 +40,15 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // Load API Routes
 app.use('/v1/auth', authRoutes);
-app.use('/v1/contracts', requireAuth, contractRoutes);
-app.use('/v1/documents', requireAuth, documentRoutes);
-app.use('/v1/categories', requireAuth, categoryRoutes);
-app.use('/v1/tags', requireAuth, tagRoutes);
-app.use('/v1/legal', requireAuth, legalRoutes);
-app.use('/v1/settings', requireAuth, settingsRoutes);
-app.use('/v1/templates', requireAuth, templateRoutes);
+app.use('/v1/contracts', requireAuth, requireActive(), contractRoutes);
+app.use('/v1/documents', requireAuth, requireActive(), documentRoutes);
+app.use('/v1/categories', requireAuth, requireActive(), categoryRoutes);
+app.use('/v1/tags', requireAuth, requireActive(), tagRoutes);
+app.use('/v1/legal', requireAuth, requireActive(), legalRoutes);
+app.use('/v1/settings', requireAuth, requireActive(), settingsRoutes);
+app.use('/v1/templates', requireAuth, requireActive(), templateRoutes);
 app.use('/v1/integration', integrationRoutes);
+app.use('/v1/admin', requireAuth, requireActive(), adminRoutes);
 
 // Health Check
 app.get('/v1/health', async (req, res) => {

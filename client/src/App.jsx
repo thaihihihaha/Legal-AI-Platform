@@ -22,7 +22,9 @@ import ContractsManagement from './pages/ContractsManagement';
 import DocumentsManagement from './pages/DocumentsManagement';
 import TemplatesManagement from './pages/TemplatesManagement';
 import LegalSearchPage from './pages/LegalSearchPage';
-import { fetchWithAuth, getToken, logout } from './utils/fetchWithAuth.js';
+import AdminPanel from './pages/AdminPanel';
+import { fetchWithAuth, logout } from './utils/fetchWithAuth.js';
+import { TokenStorage, validateStoredTokens } from './utils/tokenUtils.js';
 import './app.css';
 import './styles/management-pages.css';
 
@@ -883,6 +885,8 @@ function WorkspaceLayout({
     content = <RiskOverviewPage token={token} />;
   } else if (pageKey.startsWith('/settings')) {
     content = <SettingsPage />;
+  } else if (pageKey.startsWith('/admin')) {
+    content = <AdminPanel />;
   }
 
   return (
@@ -894,6 +898,7 @@ function WorkspaceLayout({
           expanded={expanded}
           toggle={toggle}
           navigate={navigate}
+          user={user}
         />
 
         <main id="main-content" className="main-editor" role="main">
@@ -962,6 +967,40 @@ function WorkspaceController() {
     setModal({ open: false, title: '', message: '' });
   }, []);
 
+  // Token expiry event listener
+  useEffect(() => {
+    const handleTokenExpired = (event) => {
+      const message = event.detail?.message || 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      openModal('Phiên đăng nhập', message);
+      setTimeout(() => {
+        handleLogout();
+      }, 2000);
+    };
+
+    window.addEventListener('token-expired', handleTokenExpired);
+    return () => window.removeEventListener('token-expired', handleTokenExpired);
+  }, [openModal]);
+
+  // Validate tokens on app startup
+  useEffect(() => {
+    validateStoredTokens()
+      .then((isValid) => {
+        if (isValid) {
+          // Token is valid, restore from storage
+          const currentToken = TokenStorage.getAccessToken();
+          setToken(currentToken);
+        } else {
+          // Tokens invalid or expired, clear
+          setToken('');
+          setUser(null);
+        }
+      })
+      .catch(() => {
+        setToken('');
+        setUser(null);
+      });
+  }, []);
+
   const fetchContracts = async () => {
     const response = await fetchWithAuth(`${API_URL}/v1/contracts`);
 
@@ -985,7 +1024,7 @@ function WorkspaceController() {
 
     fetchContracts().catch(() => {
       openModal('Phiên đăng nhập', 'Token không hợp lệ hoặc đã hết hạn, vui lòng đăng nhập lại.');
-      localStorage.removeItem('longpl_token');
+      TokenStorage.clearTokens();
       setToken('');
       setUser(null);
       setContracts([]);
@@ -1040,7 +1079,8 @@ function WorkspaceController() {
         throw new Error(loginData.error || 'Đăng nhập thất bại.');
       }
 
-      localStorage.setItem('longpl_token', loginData.token);
+      // Store both access and refresh tokens
+      TokenStorage.setTokens(loginData.token, loginData.refresh_token);
       setToken(loginData.token);
       setUser(loginData.user || null);
       setAuthForm({ fullName: '', email: '', password: '' });
@@ -1053,7 +1093,7 @@ function WorkspaceController() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('longpl_token');
+    TokenStorage.clearTokens();
     setToken('');
     setUser(null);
     setContracts([]);
@@ -1208,6 +1248,7 @@ export default function App() {
         <Route path="/risk-overview/*" element={<WorkspaceController />} />
         <Route path="/integrations/*" element={<WorkspaceController />} />
         <Route path="/settings/*" element={<WorkspaceController />} />
+        <Route path="/admin/*" element={<WorkspaceController />} />
         <Route path="*" element={<WorkspaceController />} />
       </Routes>
     </BrowserRouter>

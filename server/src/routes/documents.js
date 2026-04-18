@@ -14,6 +14,7 @@ import {
 import { setDocumentTags } from '../services/tagService.js';
 import { resolveCompanyId } from '../services/tenantService.js';
 import { createDiskUpload, toRelativePath, getFileUrl, getAbsolutePath } from '../config/storage.js';
+import { requireAction } from '../middleware/rolePermissions.js';
 
 const require = createRequire(import.meta.url);
 const pdfParseModule = require('pdf-parse');
@@ -100,7 +101,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── POST /upload — Upload + lưu file trên disk ───────────────────────────────
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', requireAction('upload:documents'), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Chưa có file nào được đính kèm.' });
 
   const filePath = req.file.path;
@@ -183,7 +184,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── PATCH /:id — Cập nhật metadata tài liệu ────────────────────────────────
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAction('edit:documents'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });
@@ -208,7 +209,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // ─── DELETE /:id ──────────────────────────────────────────────────────────────
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAction('delete:documents'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });
@@ -227,7 +228,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // ─── POST /:id/analyze — AI phân tích tài liệu ─────────────────────────────
-router.post('/:id/analyze', async (req, res) => {
+router.post('/:id/analyze', requireAction('analyze:documents'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });

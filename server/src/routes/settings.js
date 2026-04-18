@@ -7,10 +7,12 @@ import {
 } from '../services/apiKeyService.js';
 import { getUsageDashboard } from '../services/usageService.js';
 import { resolveCompanyId } from '../services/tenantService.js';
+import { requireAction } from '../middleware/rolePermissions.js';
 
 const router = Router();
 
-router.get('/api-keys', async (req, res) => {
+// All settings endpoints require admin role
+router.get('/api-keys', requireAction('manage:api_keys'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) {
@@ -30,7 +32,7 @@ router.get('/api-keys', async (req, res) => {
   }
 });
 
-router.post('/api-keys', async (req, res) => {
+router.post('/api-keys', requireAction('manage:api_keys'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) {
@@ -70,7 +72,7 @@ router.post('/api-keys', async (req, res) => {
   }
 });
 
-router.patch('/api-keys/:id', async (req, res) => {
+router.patch('/api-keys/:id', requireAction('manage:api_keys'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) {
@@ -102,7 +104,7 @@ router.patch('/api-keys/:id', async (req, res) => {
   }
 });
 
-router.delete('/api-keys/:id', async (req, res) => {
+router.delete('/api-keys/:id', requireAction('manage:api_keys'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) {

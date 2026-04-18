@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { resolveCompanyId } from '../services/tenantService.js';
 import { getCategoryTree, createCategory, updateCategory, deleteCategory } from '../services/categoryService.js';
+import { requireAction } from '../middleware/rolePermissions.js';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/:resourceType', async (req, res) => {
 });
 
 // POST /v1/categories
-router.post('/', async (req, res) => {
+router.post('/', requireAction('create:categories'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });
@@ -31,7 +32,7 @@ router.post('/', async (req, res) => {
 });
 
 // PATCH /v1/categories/:id
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAction('edit:categories'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });
@@ -43,7 +44,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // DELETE /v1/categories/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAction('delete:categories'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });

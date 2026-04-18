@@ -47,6 +47,7 @@ model Company {
   messages      Message[]
   categories    Category[]
   tags          Tag[]
+  audit_logs    AuditLog[]
 
   @@map("companies")
 }
@@ -80,16 +81,28 @@ model User {
   auth_id       String?   @unique @db.Uuid
   password_hash String?
   avatar_url    String?
+  phone_number  String?   @db.VarChar(20)
+  is_active     Boolean   @default(true)
+  is_super_admin Boolean  @default(false)
   preferences   Json?     @default("{}")
   user_settings Json?     @default("{}")
+  totp_secret   String?   @db.VarChar(64)
+  totp_enabled  Boolean   @default(false)
+  last_login_at DateTime? @db.Timestamptz()
   created_at    DateTime? @default(now()) @db.Timestamptz()
+  updated_at    DateTime? @default(now()) @db.Timestamptz()
 
-  company Company? @relation(fields: [company_id], references: [id], onDelete: SetNull)
-  contracts Contract[] @relation("ContractsUploadedBy")
-  documents Document[] @relation("DocumentsUploadedBy")
-  chat_sessions ChatSession[] @relation("ChatSessionsByUser")
+  company         Company?       @relation(fields: [company_id], references: [id], onDelete: SetNull)
+  contracts       Contract[]     @relation("ContractsUploadedBy")
+  documents       Document[]     @relation("DocumentsUploadedBy")
+  chat_sessions   ChatSession[]  @relation("ChatSessionsByUser")
+  audit_logs      AuditLog[]     @relation("AuditLogByActor")
+  invitations_created InvitationToken[] @relation("InvitationCreateBy")
+  refresh_tokens  RefreshToken[] @relation("RefreshTokens")
 
   @@index([company_id])
+  @@index([email])
+  @@index([is_super_admin])
   @@map("users")
 }
 
@@ -262,4 +275,59 @@ model Message {
   @@index([session_id])
   @@index([company_id])
   @@map("messages")
+}
+
+model AuditLog {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id      String?   @db.Uuid
+  actor_id        String    @db.Uuid
+  action          String    @db.VarChar(50)
+  resource_type   String    @db.VarChar(50)
+  resource_id     String?   @db.Uuid
+  changes         Json?     @default("{}")
+  ip_address      String?   @db.VarChar(45)
+  created_at      DateTime? @default(now()) @db.Timestamptz()
+
+  actor           User      @relation("AuditLogByActor", fields: [actor_id], references: [id], onDelete: Cascade)
+  company         Company?  @relation(fields: [company_id], references: [id], onDelete: SetNull)
+
+  @@index([company_id])
+  @@index([actor_id])
+  @@index([created_at])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model InvitationToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String    @db.VarChar(255)
+  token       String    @unique @db.VarChar(64)
+  role        UserRole  @default(member)
+  expires_at  DateTime  @db.Timestamptz()
+  created_by  String    @db.Uuid
+  used_at     DateTime? @db.Timestamptz()
+  used_by     String?   @db.Uuid
+  created_at  DateTime? @default(now()) @db.Timestamptz()
+
+  creator     User      @relation("InvitationCreateBy", fields: [created_by], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([token])
+  @@index([expires_at])
+  @@map("invitation_tokens")
+}
+
+model RefreshToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String    @db.Uuid
+  token_hash  String    @unique
+  expires_at  DateTime  @db.Timestamptz()
+  revoked_at  DateTime? @db.Timestamptz()
+  created_at  DateTime? @default(now()) @db.Timestamptz()
+
+  user        User      @relation("RefreshTokens", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+  @@map("refresh_tokens")
 }

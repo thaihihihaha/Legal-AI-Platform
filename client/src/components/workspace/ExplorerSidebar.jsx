@@ -8,10 +8,11 @@ import {
   LayoutDashboard,
   Search,
   Settings,
+  Shield,
   Scale,
 } from 'lucide-react';
 
-export default function ExplorerSidebar({ contracts, expanded, toggle, navigate }) {
+export default function ExplorerSidebar({ contracts, expanded, toggle, navigate, user }) {
   const location = useLocation();
   const recentContracts = contracts.slice(0, 5);
 
@@ -123,8 +124,19 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate 
         </div>
       )}
 
-      {/* Footer - Settings */}
+      {/* Footer - Settings & Admin */}
       <div className="sidebar-footer">
+        {user?.is_super_admin && (
+          <button
+            type="button"
+            className={`sidebar-nav-item${isActive('/admin') ? ' active' : ''}`}
+            onClick={() => navigate('/admin')}
+            title="Bảng điều khiển admin"
+          >
+            <Shield size={16} />
+            <span>Admin</span>
+          </button>
+        )}
         <button
           type="button"
           className={`sidebar-nav-item${isActive('/settings') ? ' active' : ''}`}

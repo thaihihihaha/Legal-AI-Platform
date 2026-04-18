@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { resolveCompanyId } from '../services/tenantService.js';
 import { listTags, createTag, updateTag, deleteTag } from '../services/tagService.js';
+import { requireAction } from '../middleware/rolePermissions.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireAction('create:tags'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });
@@ -25,7 +26,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAction('edit:tags'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });
@@ -36,7 +37,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAction('delete:tags'), async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không xác định được công ty.' });

@@ -3,11 +3,12 @@ import { agentAsk } from '../agents/legal_agent.js';
 import { resolveCompanyId } from '../services/tenantService.js';
 import { appendChatMessages, ensureDefaultSession } from '../services/chatService.js';
 import { buildLegalPromptContext, searchLegalEvidence } from '../services/legalRetrieval.js';
+import { requireAction } from '../middleware/rolePermissions.js';
 
 const router = Router();
 
 // Hỏi đáp chuyên sâu AI
-router.post('/ask', async (req, res) => {
+router.post('/ask', requireAction('view:legal_ai'), async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: 'Cần nhập nội dung' });
 
