@@ -89,12 +89,19 @@ export const canPerformAction = (userRole, action, context = {}) => {
  * Usage: router.post('/upload', requireAction('upload:contracts'), handler)
  * @param {string} action
  * @returns {Function} Express middleware
+ * 
+ * Note: Owner and SuperAdmin roles bypass all permissions (have full access)
  */
 export const requireAction =
   (action) =>
   (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // ✨ Owner and SuperAdmin bypass: They have full access to all actions
+    if (req.user.role === 'owner' || req.user.is_super_admin) {
+      return next();
     }
 
     if (!canPerformAction(req.user.role, action)) {
@@ -111,12 +118,19 @@ export const requireAction =
 /**
  * Require one of multiple actions (OR logic)
  * Usage: router.delete('/:id', requireActionAny('delete:documents', 'owner:document'), handler)
+ * 
+ * Note: Owner and SuperAdmin bypass - they have full access
  */
 export const requireActionAny =
   (...actions) =>
   (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // ✨ Owner and SuperAdmin bypass: They have full access to all actions
+    if (req.user.role === 'owner' || req.user.is_super_admin) {
+      return next();
     }
 
     const hasPermission = actions.some((action) => canPerformAction(req.user.role, action));
@@ -136,9 +150,16 @@ export const requireActionAny =
  * Check if user is document/resource owner or admin
  * Useful for PATCH/DELETE where users can modify their own but admins can modify any
  * Usage: await checkOwnershipOrAdmin(req, userId, 'contract')
+ * 
+ * Note: Owner and SuperAdmin have full access to all resources
  */
 export const checkOwnershipOrAdmin = async (req, resourceOwnerId) => {
   if (!req.user) return false;
+
+  // ✨ Owner and SuperAdmin can access anything
+  if (req.user.role === 'owner' || req.user.is_super_admin) {
+    return true;
+  }
 
   // Admins can do anything
   if (hasMinimumRole(req.user.role, 'admin')) {

@@ -9,6 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 export default function DocumentsManagement() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -35,6 +36,7 @@ export default function DocumentsManagement() {
       if (response.ok) {
         const data = await response.json();
         setDocuments(data.documents || []);
+        setLoadedOnce(true);
       } else {
         console.error('Failed to fetch documents:', response.status);
       }
@@ -180,7 +182,10 @@ export default function DocumentsManagement() {
         icon={<FileText size={32} />}
         title="Quản lý Tài Liệu"
         subtitle="Lưu trữ, tìm kiếm và quản lý toàn bộ tài liệu hỗ trợ pháp lý"
-        pills={[`${documents.length} tài liệu`, `${(documents.reduce((sum, d) => sum + (d.file_size || 0), 0) / (1024 * 1024)).toFixed(1)} MB`]}
+        pills={[
+          `${loading && !loadedOnce ? '...' : documents.length} tài liệu`,
+          `${loading && !loadedOnce ? '...' : (documents.reduce((sum, d) => sum + (d.file_size || 0), 0) / (1024 * 1024)).toFixed(1)} MB`
+        ]}
       />
 
       {/* Action Bar */}
