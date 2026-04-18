@@ -1,0 +1,71 @@
+.custom-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(2, 8, 20, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.custom-modal-box {
+  background: linear-gradient(180deg, rgba(20, 32, 61, 0.98), rgba(14, 22, 43, 0.98));
+  border-radius: 14px;
+  border: 1px solid rgba(146, 181, 244, 0.28);
+  padding: 24px;
+  width: 90%;
+  max-width: 430px;
+  box-shadow: 0 16px 38px rgba(2, 8, 23, 0.5);
+  animation: fadeIn 0.3s ease;
+}
+
+.custom-modal-title {
+  margin: 0 0 10px 0;
+  font-size: 1.1rem;
+  color: #eaf3ff;
+}
+
+.custom-modal-message {
+  margin: 0 0 24px 0;
+  color: #9fb3db;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.custom-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.custom-modal-btn {
+  padding: 9px 16px;
+  min-height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-weight: 700;
+}
+
+.custom-modal-btn:focus-visible {
+  outline: 2px solid rgba(175, 207, 255, 0.95);
+  outline-offset: 2px;
+}
+
+.custom-modal-btn.cancel {
+  background: rgba(121, 161, 242, 0.12);
+  border-color: rgba(141, 180, 246, 0.3);
+  color: #d8e8ff;
+}
+
+.custom-modal-btn.confirm {
+  background: linear-gradient(135deg, #2e74e8, #4b9bff);
+  border-color: rgba(139, 180, 250, 0.44);
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

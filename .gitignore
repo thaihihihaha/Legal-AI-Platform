@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables (chứa secrets — KHÔNG commit)
+server/.env
+client/.env
+.env
+
+# Build output
+client/dist/
+client/build/
+
+# File uploads — lưu trên server, KHÔNG commit vào git
+# Khi git pull, các file upload cũ vẫn còn trên disk
+server/uploads/**
+!server/uploads/.gitkeep
+!server/uploads/contracts/.gitkeep
+!server/uploads/documents/.gitkeep
+!server/uploads/templates/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Prisma generated
+server/node_modules/.prisma/

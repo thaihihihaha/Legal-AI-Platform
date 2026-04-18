@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+}
+
+enum PlanType {
+  trial
+  starter
+  pro
+  enterprise
+}
+
+enum UserRole {
+  owner
+  admin
+  member
+  viewer
+}
+
+model Company {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  slug           String    @unique
+  plan           PlanType  @default(trial)
+  monthly_quota  Int       @default(50)
+  used_quota     Int       @default(0)
+  quota_reset_at DateTime? @default(dbgenerated("(date_trunc('month', now()) + interval '1 month')")) @db.Timestamptz()
+  settings       Json?     @default("{}")
+  industry       String?
+  employee_count Int?
+  tax_code       String?
+  created_at     DateTime? @default(now()) @db.Timestamptz()
+  updated_at     DateTime? @default(now()) @db.Timestamptz()
+
+  users         User[]
+  api_keys      ApiKey[]
+  contracts     Contract[]
+  documents     Document[]
+  chat_sessions ChatSession[]
+  messages      Message[]
+  categories    Category[]
+  tags          Tag[]
+
+  @@map("companies")
+}
+
+model ApiKey {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id   String    @db.Uuid
+  name         String
+  key_hash     String
+  key_prefix   String
+  permissions  String[]  @default(["read", "ask", "review"])
+  rate_limit   Int       @default(60)
+  is_active    Boolean   @default(true)
+  last_used_at DateTime? @db.Timestamptz()
+  expires_at   DateTime? @db.Timestamptz()
+  created_at   DateTime? @default(now()) @db.Timestamptz()
+
+  company Company @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([key_prefix])
+  @@map("api_keys")
+}
+
+model User {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id    String?   @db.Uuid
+  role          UserRole  @default(member)
+  full_name     String?
+  email         String?   @unique
+  auth_id       String?   @unique @db.Uuid
+  password_hash String?
+  avatar_url    String?
+  preferences   Json?     @default("{}")
+  user_settings Json?     @default("{}")
+  created_at    DateTime? @default(now()) @db.Timestamptz()
+
+  company Company? @relation(fields: [company_id], references: [id], onDelete: SetNull)
+  contracts Contract[] @relation("ContractsUploadedBy")
+  documents Document[] @relation("DocumentsUploadedBy")
+  chat_sessions ChatSession[] @relation("ChatSessionsByUser")
+
+  @@index([company_id])
+  @@map("users")
+}
+
+model Contract {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id       String    @db.Uuid
+  uploaded_by      String?   @db.Uuid
+  category_id      String?   @db.Uuid
+  name             String    @db.VarChar(500)
+  contract_type    String?   @db.VarChar(100)
+  file_type        String?   @db.VarChar(50)
+  file_path        String?                    // đường dẫn tương đối từ UPLOAD_DIR
+  file_size        Int?
+  extracted_text   String?
+  status           String?   @default("active") @db.VarChar(50)
+  workflow_status  String?   @default("draft") @db.VarChar(50) // draft|pending_review|approved|signed|active|expired|terminated
+  review_result    Json?
+  metadata         Json?     @default("{}")
+  content          String?
+  notes            String?                    // ghi chú nội bộ
+  // Thông tin pháp lý
+  effective_date   DateTime? @db.Timestamptz()
+  expiry_date      DateTime? @db.Timestamptz()
+  signed_date      DateTime? @db.Timestamptz()
+  party_a_name     String?   @db.VarChar(500)
+  party_b_name     String?   @db.VarChar(500)
+  party_b_tax_code String?   @db.VarChar(50)
+  contract_value   Decimal?  @db.Decimal(18, 2)
+  currency         String?   @default("VND") @db.VarChar(10)
+  created_at       DateTime? @default(now()) @db.Timestamptz()
+  updated_at       DateTime? @default(now()) @db.Timestamptz()
+  deleted_at       DateTime? @db.Timestamptz()
+
+  company  Company      @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  uploader User?        @relation("ContractsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
+  category Category?    @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  tags     ContractTag[]
+
+  @@index([company_id, created_at(sort: Desc)])
+  @@index([company_id, expiry_date])
+  @@map("contracts")
+}
+
+// ── Danh mục (tối đa 3 cấp, dùng chung cho contracts/documents/templates) ──
+model Category {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id    String    @db.Uuid
+  parent_id     String?   @db.Uuid
+  resource_type String    @db.VarChar(50) // 'contract' | 'document' | 'template'
+  name          String    @db.VarChar(200)
+  description   String?
+  color         String?   @db.VarChar(20)
+  icon          String?   @db.VarChar(50)
+  order_index   Int       @default(0)
+  created_at    DateTime? @default(now()) @db.Timestamptz()
+
+  company   Company    @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  parent    Category?  @relation("CategoryChildren", fields: [parent_id], references: [id])
+  children  Category[] @relation("CategoryChildren")
+  contracts Contract[]
+  documents Document[]
+
+  @@index([company_id, resource_type])
+  @@map("categories")
+}
+
+// ── Tags (dùng chung, gắn tag qua bảng junction) ─────────────────────────────
+model Tag {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id String    @db.Uuid
+  name       String    @db.VarChar(100)
+  color      String?   @db.VarChar(20)
+  created_at DateTime? @default(now()) @db.Timestamptz()
+
+  company       Company       @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  contract_tags ContractTag[]
+  document_tags DocumentTag[]
+
+  @@unique([company_id, name])
+  @@index([company_id])
+  @@map("tags")
+}
+
+model ContractTag {
+  contract_id String @db.Uuid
+  tag_id      String @db.Uuid
+
+  contract Contract @relation(fields: [contract_id], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([contract_id, tag_id])
+  @@map("contract_tags")
+}
+
+model DocumentTag {
+  document_id String @db.Uuid
+  tag_id      String @db.Uuid
+
+  document Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([document_id, tag_id])
+  @@map("document_tags")
+}
+
+model Document {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id       String    @db.Uuid
+  uploaded_by      String?   @db.Uuid
+  category_id      String?   @db.Uuid
+  name             String    @db.VarChar(500)
+  file_path        String                    // đường dẫn tương đối từ UPLOAD_DIR
+  file_size        Int?
+  mime_type        String?   @db.VarChar(100)
+  extracted_text   String?
+  content          String?                   // full text extracted content
+  status           String?   @default("active") @db.VarChar(50)
+  workflow_status  String?   @default("draft") @db.VarChar(50) // draft|review|approved|archived
+  analysis         Json?                     // AI analysis results (document_type, main_topics, suggested_tags, summary, recommended_category)
+  metadata         Json?     @default("{}")  // additional metadata
+  notes            String?                   // ghi chú nội bộ
+  created_at       DateTime? @default(now()) @db.Timestamptz()
+  updated_at       DateTime? @default(now()) @db.Timestamptz()
+  analyzed_at      DateTime? @db.Timestamptz()
+  deleted_at       DateTime? @db.Timestamptz()
+
+  company  Company      @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  uploader User?        @relation("DocumentsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
+  category Category?    @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  tags     DocumentTag[]
+
+  @@index([company_id, created_at(sort: Desc)])
+  @@index([company_id, workflow_status])
+  @@map("documents")
+}
+
+model ChatSession {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id      String      @db.Uuid
+  user_id         String?     @db.Uuid
+  title           String?
+  agent_type      String?     @default("qa")
+  status          String?     @default("active")
+  metadata        Json?       @default("{}")
+  message_count   Int?        @default(0)
+  last_message_at DateTime?   @db.Timestamptz()
+  created_at      DateTime?   @default(now()) @db.Timestamptz()
+
+  company         Company     @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  user            User?       @relation("ChatSessionsByUser", fields: [user_id], references: [id], onDelete: SetNull)
+  messages        Message[]
+
+  @@index([company_id])
+  @@index([user_id])
+  @@map("chat_sessions")
+}
+
+model Message {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id    String      @db.Uuid
+  company_id    String      @db.Uuid
+  role          String
+  content       String
+  metadata      Json?       @default("{}")
+  created_at    DateTime?   @default(now()) @db.Timestamptz()
+
+  session       ChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  company       Company     @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id])
+  @@index([company_id])
+  @@map("messages")
+}

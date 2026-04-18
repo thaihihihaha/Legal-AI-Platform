@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const d=require\\('d:/Project/longpl/data/uts_vlc_processed.json'\\); console.log\\('Total docs:', d.length\\); console.log\\('Sample:', JSON.stringify\\(d[0], null, 2\\).slice\\(0, 600\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node --input-type=module)",
+      "Bash(xargs grep *)",
+      "Bash(npx prisma *)"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+const REQUIRED_ENV_KEYS = ['DATABASE_URL', 'JWT_SECRET'];
+
+export const validateEnv = () => {
+  const missingKeys = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]);
+
+  if (missingKeys.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingKeys.join(', ')}`);
+  }
+
+  const optionalWarnings = [];
+  if (!process.env.AZURE_OPENAI_API_KEY) {
+    optionalWarnings.push('AZURE_OPENAI_API_KEY not configured. AI features will be disabled.');
+  }
+  if (!process.env.AZURE_OPENAI_ENDPOINT) {
+    optionalWarnings.push('AZURE_OPENAI_ENDPOINT not configured. AI features may be unavailable.');
+  }
+  if (!process.env.AZURE_OPENAI_API_VERSION) {
+    optionalWarnings.push('AZURE_OPENAI_API_VERSION not configured. AI features may be unavailable.');
+  }
+
+  return {
+    missingKeys,
+    optionalWarnings,
+  };
+};
+
+export const getCorsOrigins = () => {
+  const raw = process.env.CORS_ORIGIN;
+  if (!raw) {
+    return '*';
+  }
+
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins.length > 0 ? origins : '*';
+};
