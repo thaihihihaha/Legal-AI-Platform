@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { createRequire } from 'module';
 import { unlink } from 'fs/promises';
+import { existsSync, createReadStream } from 'fs';
 import { analyzeDocument } from '../agents/legal_agent.js';
 import {
   createDocumentFromUpload,
@@ -105,7 +106,9 @@ router.post('/upload', requireAction('upload:documents'), upload.single('file'),
   if (!req.file) return res.status(400).json({ error: 'Chưa có file nào được đính kèm.' });
 
   const filePath = req.file.path;
-  const ext = req.file.originalname.split('.').pop().toLowerCase();
+  // Browser gửi filename dưới dạng UTF-8 nhưng Node.js đọc header là Latin-1 → cần re-encode
+  const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+  const ext = originalName.split('.').pop().toLowerCase();
 
   try {
     const companyId = req.resolvedCompanyId;
@@ -114,7 +117,8 @@ router.post('/upload', requireAction('upload:documents'), upload.single('file'),
       return res.status(400).json({ error: 'Không tìm thấy company_id.' });
     }
 
-    const extractedText = await extractText(filePath, ext);
+    const rawText = await extractText(filePath, ext);
+    const extractedText = rawText ? rawText.substring(0, 100000) : '';
     const relativePath = toRelativePath(filePath);
 
     // Lấy metadata từ body (optional)
@@ -134,7 +138,7 @@ router.post('/upload', requireAction('upload:documents'), upload.single('file'),
     const document = await createDocumentFromUpload({
       companyId,
       userId: req.user?.id || null,
-      originalName: req.file.originalname,
+      originalName,
       mimeType: req.file.mimetype || ext,
       fileSize: req.file.size,
       filePath: relativePath,
@@ -151,7 +155,7 @@ router.post('/upload', requireAction('upload:documents'), upload.single('file'),
     res.json({
       message: 'Tải tài liệu thành công',
       documentId: document?.id || null,
-      fileName: req.file.originalname,
+      fileName: originalName,
       file_url: getFileUrl(relativePath),
       textPreview: extractedText.substring(0, 500) + '...',
       textLength: extractedText.length,
@@ -160,6 +164,47 @@ router.post('/upload', requireAction('upload:documents'), upload.single('file'),
     await unlink(filePath).catch(() => {}); // dọn file nếu lỗi
     console.error('upload error:', err);
     res.status(500).json({ error: 'Quá trình xử lý file thất bại.' });
+  }
+});
+
+// ─── GET /:id/download — Tải file tài liệu ──────────────────────────────────
+router.get('/:id/download', async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user);
+    if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });
+
+    const document = await getDocumentById(companyId, req.params.id);
+    if (!document) return res.status(404).json({ error: 'Không tìm thấy tài liệu.' });
+
+    if (!document.file_path) {
+      return res.status(404).json({ error: 'Tài liệu chưa có file đính kèm.' });
+    }
+
+    const absolutePath = getAbsolutePath(document.file_path);
+    if (!existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'File không tồn tại trên server. Vui lòng upload lại tài liệu.' });
+    }
+
+    const inline = req.query.inline === 'true';
+    const fileName = document.name || 'document';
+    const mimeType = document.mime_type || 'application/octet-stream';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+
+    const stream = createReadStream(absolutePath);
+    stream.on('error', (streamErr) => {
+      console.error('File stream error:', streamErr);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Không thể đọc file.' });
+      }
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('download error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Không thể tải file.' });
+    }
   }
 });
 

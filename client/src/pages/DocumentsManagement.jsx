@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Download, Trash2, Eye, Grid3x3, List, ChevronUp, ChevronDown, X } from 'lucide-react';
+import { Search, Download, Trash2, Eye, Grid3x3, List, ChevronUp, ChevronDown, X, FileText, UploadCloud } from 'lucide-react';
 import PageHero from '../components/ui/PageHero';
-import { FileText, UploadCloud } from 'lucide-react';
-import Modal from '../components/Modal';
+import '../components/modal.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -115,15 +114,48 @@ export default function DocumentsManagement() {
     }
   };
 
-  // Download document
-  const handleDownload = (doc) => {
-    if (doc.file_url) {
+  const fetchFileBlob = async (docId) => {
+    const token = localStorage.getItem('longpl_token');
+    const response = await fetch(`${API_URL}/v1/documents/${docId}/download`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Không thể truy cập file');
+    }
+    return response.blob();
+  };
+
+  const handleView = async (doc) => {
+    // Mở tab ngay lập tức (trong user gesture) trước khi fetch — tránh bị popup blocker chặn
+    const newTab = window.open('', '_blank');
+    if (!newTab) {
+      alert('Trình duyệt đang chặn popup. Vui lòng cho phép popup từ trang này và thử lại.');
+      return;
+    }
+    try {
+      const blob = await fetchFileBlob(doc.id);
+      const url = URL.createObjectURL(blob);
+      newTab.location.href = url;
+    } catch (err) {
+      newTab.close();
+      alert(err.message);
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      const blob = await fetchFileBlob(doc.id);
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = doc.file_url;
+      link.href = url;
       link.download = doc.name || 'document';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -167,6 +199,29 @@ export default function DocumentsManagement() {
     } else {
       setSelectedItems(new Set(filteredDocuments.map((d) => d.id)));
     }
+  };
+
+  const formatMimeType = (mime) => {
+    if (!mime) return '—';
+    const map = {
+      'application/pdf': 'PDF',
+      'application/msword': 'DOC',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+      'application/vnd.ms-excel': 'XLS',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+      'application/vnd.ms-powerpoint': 'PPT',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+      'text/plain': 'TXT',
+      'text/markdown': 'MD',
+      'image/jpeg': 'JPG',
+      'image/png': 'PNG',
+      'image/gif': 'GIF',
+      'image/webp': 'WEBP',
+    };
+    if (map[mime]) return map[mime];
+    // fallback: lấy phần sau dấu / hoặc sau dấu .
+    const sub = mime.split('/').pop() || mime;
+    return sub.split('.').pop().toUpperCase().slice(0, 10);
   };
 
   const formatFileSize = (bytes) => {
@@ -329,17 +384,17 @@ export default function DocumentsManagement() {
                   <td className="col-name">
                     <span className="doc-name">{doc.name || 'Không có tên'}</span>
                   </td>
-                  <td>{doc.mime_type || 'Không rõ'}</td>
+                  <td>{formatMimeType(doc.mime_type)}</td>
                   <td>{formatFileSize(doc.file_size)}</td>
                   <td className="col-date">
                     {doc.created_at ? new Date(doc.created_at).toLocaleDateString('vi-VN') : '-'}
                   </td>
                   <td className="col-actions">
-                    <button 
-                      type="button" 
-                      className="icon-btn" 
+                    <button
+                      type="button"
+                      className="icon-btn"
                       title="Xem"
-                      onClick={() => window.open(doc.file_url, '_blank')}
+                      onClick={() => handleView(doc)}
                     >
                       <Eye size={16} />
                     </button>
@@ -375,16 +430,16 @@ export default function DocumentsManagement() {
               <div className="doc-card-content">
                 <FileText size={32} />
                 <h4>{doc.name || 'Không có tên'}</h4>
-                <p className="doc-type">{doc.mime_type || 'Không rõ'}</p>
+                <p className="doc-type">{formatMimeType(doc.mime_type)}</p>
                 <p className="doc-size">{formatFileSize(doc.file_size)}</p>
               </div>
               <div className="doc-card-footer">
                 <span className="doc-date">{doc.created_at ? new Date(doc.created_at).toLocaleDateString('vi-VN') : '-'}</span>
                 <div className="doc-actions">
-                  <button type="button" className="icon-btn" title="Xem">
+                  <button type="button" className="icon-btn" title="Xem" onClick={() => handleView(doc)}>
                     <Eye size={14} />
                   </button>
-                  <button type="button" className="icon-btn" title="Tải">
+                  <button type="button" className="icon-btn" title="Tải" onClick={() => handleDownload(doc)}>
                     <Download size={14} />
                   </button>
                 </div>
@@ -395,91 +450,77 @@ export default function DocumentsManagement() {
       )}
 
       {/* Upload Modal */}
-      <Modal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} title="Upload Tài Liệu">
-        <div className="modal-content" style={{ minWidth: '400px' }}>
-          {uploadError && (
-            <div style={{ padding: '12px', background: '#fee2e2', color: '#b91c1c', borderRadius: '6px', marginBottom: '16px' }}>
-              {uploadError}
+      {showUploadModal && (
+        <div className="custom-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowUploadModal(false); }}>
+          <div className="custom-modal-box" style={{ maxWidth: '480px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 className="custom-modal-title" style={{ margin: 0 }}>Upload Tài Liệu</h3>
+              <button
+                type="button"
+                onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadError(''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9fb3db', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
             </div>
-          )}
-          
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-              Chọn file
-            </label>
-            <input
-              type="file"
-              onChange={(e) => {
-                setUploadFile(e.target.files?.[0] || null);
-                setUploadError('');
-              }}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-              }}
-            />
-            {uploadFile && (
-              <p style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
-                📄 {uploadFile.name} ({(uploadFile.size / 1024).toFixed(1)} KB)
-              </p>
+
+            {uploadError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>
+                {uploadError}
+              </div>
             )}
-          </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-              Ghi chú (tùy chọn)
-            </label>
-            <textarea
-              value={uploadNotes}
-              onChange={(e) => setUploadNotes(e.target.value)}
-              placeholder="Mô tả tài liệu..."
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
-            />
-          </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#d8e8ff', fontSize: '0.9rem' }}>
+                Chọn file
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md,.xlsx,.pptx"
+                onChange={(e) => { setUploadFile(e.target.files?.[0] || null); setUploadError(''); }}
+                style={{ width: '100%', padding: '8px', border: '1px solid rgba(141,180,246,0.3)', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', color: '#d8e8ff', boxSizing: 'border-box' }}
+              />
+              {uploadFile && (
+                <p style={{ marginTop: '8px', fontSize: '13px', color: '#9fb3db' }}>
+                  {uploadFile.name} &mdash; {(uploadFile.size / 1024).toFixed(1)} KB
+                </p>
+              )}
+            </div>
 
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={() => setShowUploadModal(false)}
-              style={{
-                padding: '8px 16px',
-                background: '#f3f4f6',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
-            >
-              Hủy
-            </button>
-            <button
-              type="button"
-              onClick={handleUpload}
-              disabled={uploading || !uploadFile}
-              style={{
-                padding: '8px 16px',
-                background: uploading ? '#9ca3af' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: uploading ? 'not-allowed' : 'pointer',
-                opacity: uploading ? 0.6 : 1,
-              }}
-            >
-              {uploading ? 'Đang upload...' : 'Upload'}
-            </button>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#d8e8ff', fontSize: '0.9rem' }}>
+                Ghi chú (tùy chọn)
+              </label>
+              <textarea
+                value={uploadNotes}
+                onChange={(e) => setUploadNotes(e.target.value)}
+                placeholder="Mô tả tài liệu..."
+                rows={3}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(141,180,246,0.3)', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', color: '#d8e8ff', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div className="custom-modal-actions">
+              <button
+                type="button"
+                className="custom-modal-btn cancel"
+                onClick={() => { setShowUploadModal(false); setUploadFile(null); setUploadError(''); }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="custom-modal-btn confirm"
+                onClick={handleUpload}
+                disabled={uploading || !uploadFile}
+                style={{ opacity: uploading || !uploadFile ? 0.6 : 1, cursor: uploading || !uploadFile ? 'not-allowed' : 'pointer' }}
+              >
+                {uploading ? 'Đang upload...' : 'Upload'}
+              </button>
+            </div>
           </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }

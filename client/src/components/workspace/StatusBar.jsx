@@ -8,7 +8,7 @@ export default function StatusBar({ pathName, user }) {
         <span className="status-connection"><Scale size={14} /> Kết nối: {pathName.replace('/', '') || 'dashboard'}</span>
       </div>
       <div className="status-right">
-        <span>{user?.email || 'AI Legal Agent'}</span>
+        <span>{user?.email || 'Trợ Lý Pháp Lý AI'}</span>
       </div>
     </div>
   );

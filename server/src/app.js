@@ -10,7 +10,9 @@ import legalRoutes from './routes/legal.js';
 import settingsRoutes from './routes/settings.js';
 import integrationRoutes from './routes/integration.js';
 import templateRoutes from './routes/templates.js';
+import draftsRoutes from './routes/drafts.js';
 import adminRoutes from './routes/admin.js';
+import phase3Routes from './routes/phase3.js';
 import { initAI, getAIStatus } from './agents/legal_agent.js';
 import { initPinecone, getPineconeStatus } from './services/pinecone.js';
 import { validateEnv, getCorsOrigins } from './config/env.js';
@@ -47,8 +49,10 @@ app.use('/v1/tags', requireAuth, requireActive(), tagRoutes);
 app.use('/v1/legal', requireAuth, requireActive(), legalRoutes);
 app.use('/v1/settings', requireAuth, requireActive(), settingsRoutes);
 app.use('/v1/templates', requireAuth, requireActive(), templateRoutes);
+app.use('/v1/drafts', requireAuth, requireActive(), draftsRoutes);
 app.use('/v1/integration', integrationRoutes);
 app.use('/v1/admin', requireAuth, requireActive(), adminRoutes);
+app.use('/v1', requireAuth, requireActive(), phase3Routes);
 
 // Health Check
 app.get('/v1/health', async (req, res) => {

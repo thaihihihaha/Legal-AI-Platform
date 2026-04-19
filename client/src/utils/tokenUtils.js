@@ -10,6 +10,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 export const TokenStorage = {
   KEY_ACCESS: 'longpl_token',
   KEY_REFRESH: 'longpl_refresh_token',
+  KEY_USER: 'longpl_user',
 
   getAccessToken() {
     return localStorage.getItem(this.KEY_ACCESS) || '';
@@ -29,10 +30,26 @@ export const TokenStorage = {
   clearTokens() {
     localStorage.removeItem(this.KEY_ACCESS);
     localStorage.removeItem(this.KEY_REFRESH);
+    localStorage.removeItem(this.KEY_USER);
   },
 
   hasTokens() {
     return !!this.getAccessToken() && !!this.getRefreshToken();
+  },
+
+  setUser(user) {
+    if (user) {
+      localStorage.setItem(this.KEY_USER, JSON.stringify(user));
+    }
+  },
+
+  getUser() {
+    try {
+      const raw = localStorage.getItem(this.KEY_USER);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -192,7 +209,10 @@ export async function fetchWithAuth(url, options = {}) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  const response = await fetch(url, {
+  // Convert relative URLs to absolute URLs using API_URL
+  const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+
+  const response = await fetch(fullUrl, {
     ...options,
     headers,
   });
@@ -208,7 +228,7 @@ export async function fetchWithAuth(url, options = {}) {
         accessToken = await refreshAccessToken();
         headers.Authorization = `Bearer ${accessToken}`;
 
-        return fetch(url, {
+        return fetch(fullUrl, {
           ...options,
           headers,
         });

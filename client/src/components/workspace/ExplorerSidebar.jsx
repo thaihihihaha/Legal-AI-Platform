@@ -10,6 +10,7 @@ import {
   Settings,
   Shield,
   Scale,
+  Tags,
 } from 'lucide-react';
 
 export default function ExplorerSidebar({ contracts, expanded, toggle, navigate, user }) {
@@ -20,7 +21,8 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate,
   const isManagementActive =
     isActive('/contracts-management') ||
     isActive('/documents-management') ||
-    isActive('/templates-management');
+    isActive('/templates-management') ||
+    isActive('/category-tags-management');
 
   return (
     <nav className="sidebar-explorer" aria-label="Điều hướng chính">
@@ -86,6 +88,15 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate,
             >
               <CopyPlus size={14} />
               <span>Quản lý Mẫu Văn Bản</span>
+            </button>
+
+            <button
+              type="button"
+              className={`sidebar-nav-item sidebar-nav-sub${isActive('/category-tags-management') ? ' active' : ''}`}
+              onClick={() => navigate('/category-tags-management')}
+            >
+              <Tags size={14} />
+              <span>Danh mục &amp; Tags</span>
             </button>
           </div>
         )}

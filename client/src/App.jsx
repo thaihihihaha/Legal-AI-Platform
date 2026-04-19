@@ -21,6 +21,7 @@ import StatCard from './components/ui/StatCard';
 import ContractsManagement from './pages/ContractsManagement';
 import DocumentsManagement from './pages/DocumentsManagement';
 import TemplatesManagement from './pages/TemplatesManagement';
+import CategoryTagsManagement from './pages/CategoryTagsManagement';
 import LegalSearchPage from './pages/LegalSearchPage';
 import AdminPanel from './pages/AdminPanel';
 import { fetchWithAuth, logout } from './utils/fetchWithAuth.js';
@@ -43,13 +44,13 @@ const formatDisplayValue = (value) => {
     const summary = value.summary || value.answer || '';
     const risks = Array.isArray(value.risks) ? value.risks : [];
     const recommendations = Array.isArray(value.recommendations) ? value.recommendations : [];
-    const riskScore = typeof value.risk_score === 'number' ? `Risk score: ${value.risk_score}/100` : '';
+    const riskScore = typeof value.risk_score === 'number' ? `Điểm rủi ro: ${value.risk_score}/100` : '';
 
     return [
       summary,
       riskScore,
-      risks.length > 0 ? `Risks: ${risks.join(' | ')}` : '',
-      recommendations.length > 0 ? `Recommendations: ${recommendations.join(' | ')}` : '',
+      risks.length > 0 ? `Rủi ro: ${risks.join(' | ')}` : '',
+      recommendations.length > 0 ? `Khuyến nghị: ${recommendations.join(' | ')}` : '',
     ].filter(Boolean).join('\n\n');
   }
 
@@ -63,7 +64,7 @@ const renderContractReviewBadge = (contract) => {
 
   const riskScore = contract.review_result.risk_score;
   if (typeof riskScore === 'number') {
-    return `Risk ${riskScore}/100`;
+    return `Rủi ro ${riskScore}/100`;
   }
 
   return 'Đã review';
@@ -223,11 +224,11 @@ function ShellDashboard({
   return (
     <div className="dashboard-content dashboard-phase3">
       <PageHero
-        kicker="LEGAL OPS DASHBOARD"
+        kicker="DASHBOARD LEGAL OPS"
         icon={<Scale size={32} />}
-        title={<>AI Legal Agent <span className="badge">AGENT</span></>}
+        title={<>Trợ lý Pháp lý AI <span className="badge">AGENT</span></>}
         subtitle="Trợ lý pháp lý AI cho doanh nghiệp Việt Nam"
-        pills={['Multi-tenant', 'Contract Intelligence', 'Compliance Ready']}
+        pills={['Đa tên miền', 'Trí tuệ Hợp đồng', 'Sẵn sàng Tuân thủ']}
       />
 
       <div className="stats-row">
@@ -239,8 +240,8 @@ function ShellDashboard({
       <div className="dashboard-stage">
         <section className="intel-panel intel-main">
           <div className="intel-headline">
-            <h3>Operational Pulse</h3>
-            <span>Realtime overview</span>
+            <h3>Nhịp điệu Vận hành</h3>
+            <span>Tổng quan Real-time</span>
           </div>
 
           <div className="intel-metrics">
@@ -272,15 +273,15 @@ function ShellDashboard({
           <div className="command-row">
             <button type="button" className="command-chip" onClick={onUploadClick}>{uploadBusy ? 'Đang upload...' : 'Nạp hợp đồng mới'}</button>
             <button type="button" className="command-chip" onClick={onReviewClick}>{reviewBusy ? 'Đang rà soát...' : 'Kích hoạt AI Review'}</button>
-            <button type="button" className="command-chip" onClick={onOpenRiskOverview}>Mở Risk Overview</button>
-            <button type="button" className="command-chip" onClick={onOpenIntegration}>Xem API Usage</button>
+            <button type="button" className="command-chip" onClick={onOpenRiskOverview}>Mở Tổng Quan Rủi Ro</button>
+            <button type="button" className="command-chip" onClick={onOpenIntegration}>Xem Sử Dụng API</button>
           </div>
         </section>
 
         <section className="intel-panel intel-side">
           <div className="intel-headline">
-            <h3>Recent Contracts</h3>
-            <span>{contracts.length} records</span>
+            <h3>Hợp đồng Gần đây</h3>
+            <span>{contracts.length} bản ghi</span>
           </div>
 
           <div className="recent-contract-list">
@@ -294,7 +295,7 @@ function ShellDashboard({
                 <div key={contract.id} className="recent-contract-item">
                   <div>
                     <h4>{contract.name}</h4>
-                    <p>{contract.contract_type || 'other'} • {contract.status || 'active'}</p>
+                    <p>{contract.contract_type || 'loại khác'} • {contract.status || 'có hiệu lực'}</p>
                   </div>
                   <span className={`status-badge ${getContractTone(contract)}`}>
                     {renderContractReviewBadge(contract)}
@@ -331,13 +332,13 @@ function ContractsPage({ contracts, onUploadClick, onReviewClick, uploadBusy, re
         icon={<FolderOpen size={32} />}
         title="Kho Hợp Đồng"
         subtitle="Danh sách hợp đồng đã upload, trạng thái review và hành động xử lý tiếp theo."
-        pills={[`${contracts.length} contracts`, `${reviewedCount} reviewed`, `${pendingCount} pending`]}
+        pills={[`${contracts.length} hợp đồng`, `${reviewedCount} đã duyệt`, `${pendingCount} chờ xử lý`]}
       />
 
       <div className="contracts-summary-strip">
-        <div className="contracts-summary-chip">Legal Vault</div>
-        <div className="contracts-summary-chip">Risk Tracking</div>
-        <div className="contracts-summary-chip">AI Review Ready</div>
+        <div className="contracts-summary-chip">Kho Pháp Lý</div>
+        <div className="contracts-summary-chip">Theo dõi Rủi ro</div>
+        <div className="contracts-summary-chip">Sẵn sàng AI Review</div>
       </div>
 
       <div className="action-grid contracts-actions">
@@ -370,7 +371,7 @@ function ContractsPage({ contracts, onUploadClick, onReviewClick, uploadBusy, re
                 <div>
                   <h3>{contract.name}</h3>
                   <p>
-                    {contract.contract_type || 'other'} • {contract.status || 'active'}
+                    {contract.contract_type || 'loại khác'} • {contract.status || 'có hiệu lực'}
                   </p>
                 </div>
                 <div className="contracts-row-side">
@@ -584,7 +585,7 @@ function TemplatesPage({ token, openModal }) {
         },
         body: JSON.stringify({
           format,
-          title: selectedTemplate?.name || 'Generated Document',
+          title: selectedTemplate?.name || 'Tài liệu được Tạo',
           text: draft,
         }),
       });
@@ -651,10 +652,10 @@ function TemplatesPage({ token, openModal }) {
 
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
             <button className="auth-submit" type="button" disabled={loading} onClick={handleGenerate}>
-              {loading ? 'Đang tạo...' : 'Generate'}
+              {loading ? 'Đang tạo...' : 'Tạo'}
             </button>
-            <button className="auth-submit" type="button" onClick={() => handleExport('docx')}>Export DOCX</button>
-            <button className="auth-submit" type="button" onClick={() => handleExport('pdf')}>Export PDF</button>
+            <button className="auth-submit" type="button" onClick={() => handleExport('docx')}>Xuất DOCX</button>
+            <button className="auth-submit" type="button" onClick={() => handleExport('pdf')}>Xuất PDF</button>
           </div>
         </div>
       )}
@@ -767,8 +768,8 @@ function IntegrationPage({ token, openModal }) {
         <h3 style={{ marginTop: 0 }}>Tạo API key mới</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 180px', gap: 10 }}>
           <input className="form-input-glass" placeholder="Tên key" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
-          <input className="form-input-glass" placeholder="permissions (read,ask,review)" value={form.permissions} onChange={(e) => setForm((prev) => ({ ...prev, permissions: e.target.value }))} />
-          <input className="form-input-glass" type="number" placeholder="Rate/min" value={form.rate_limit} onChange={(e) => setForm((prev) => ({ ...prev, rate_limit: e.target.value }))} />
+          <input className="form-input-glass" placeholder="quyền hạn (read,ask,review)" value={form.permissions} onChange={(e) => setForm((prev) => ({ ...prev, permissions: e.target.value }))} />
+          <input className="form-input-glass" type="number" placeholder="Tỉ lệ/phút" value={form.rate_limit} onChange={(e) => setForm((prev) => ({ ...prev, rate_limit: e.target.value }))} />
         </div>
         <div style={{ marginTop: 10 }}>
           <button className="auth-submit" type="button" onClick={handleCreate}>Tạo key</button>
@@ -790,7 +791,7 @@ function IntegrationPage({ token, openModal }) {
               <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(148,163,184,0.15)', paddingBottom: 8 }}>
                 <div>
                   <strong>{item.name}</strong>
-                  <div style={{ color: '#6b7791', fontSize: '0.85rem' }}>{item.masked_key} • limit {item.rate_limit}/phút • {item.is_active ? 'active' : 'inactive'}</div>
+                  <div style={{ color: '#6b7791', fontSize: '0.85rem' }}>{item.masked_key} • limit {item.rate_limit}/phút • {item.is_active ? 'hoạt động' : 'không hoạt động'}</div>
                 </div>
                 <button className="auth-submit" type="button" onClick={() => handleRevoke(item.id)}>Thu hồi</button>
               </div>
@@ -875,6 +876,8 @@ function WorkspaceLayout({
     content = <DocumentsManagement />;
   } else if (pageKey.startsWith('/templates-management')) {
     content = <TemplatesManagement />;
+  } else if (pageKey.startsWith('/category-tags-management')) {
+    content = <CategoryTagsManagement />;
   } else if (pageKey.startsWith('/legal-search')) {
     content = <LegalSearchPage />;
   } else if (pageKey.startsWith('/templates')) {
@@ -989,6 +992,7 @@ function WorkspaceController() {
           // Token is valid, restore from storage
           const currentToken = TokenStorage.getAccessToken();
           setToken(currentToken);
+          setUser(TokenStorage.getUser());
         } else {
           // Tokens invalid or expired, clear
           setToken('');
@@ -1081,6 +1085,7 @@ function WorkspaceController() {
 
       // Store both access and refresh tokens
       TokenStorage.setTokens(loginData.token, loginData.refresh_token);
+      TokenStorage.setUser(loginData.user || null);
       setToken(loginData.token);
       setUser(loginData.user || null);
       setAuthForm({ fullName: '', email: '', password: '' });

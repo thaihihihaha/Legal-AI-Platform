@@ -112,7 +112,8 @@ router.post('/parse-meta', requireAction('parse:documents'), upload.single('file
   if (!req.file) return res.status(400).json({ error: 'Chưa có file.' });
 
   const filePath = req.file.path;
-  const ext = req.file.originalname.split('.').pop().toLowerCase();
+  const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+  const ext = originalName.split('.').pop().toLowerCase();
 
   try {
     const text = await extractText(filePath, ext);
@@ -158,7 +159,8 @@ router.post('/upload', requireAction('upload:contracts'), upload.single('file'),
   if (!req.file) return res.status(400).json({ error: 'Chưa có file nào được đính kèm.' });
 
   const filePath = req.file.path;
-  const ext = req.file.originalname.split('.').pop().toLowerCase();
+  const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+  const ext = originalName.split('.').pop().toLowerCase();
 
   try {
     const companyId = req.resolvedCompanyId;
@@ -167,7 +169,9 @@ router.post('/upload', requireAction('upload:contracts'), upload.single('file'),
       return res.status(400).json({ error: 'Không tìm thấy company_id.' });
     }
 
-    const extractedText = await extractText(filePath, ext);
+    const rawText = await extractText(filePath, ext);
+    // Truncate để tránh P2000 khi column là varchar thay vì text
+    const extractedText = rawText ? rawText.substring(0, 100000) : '';
     const relativePath = toRelativePath(filePath);
 
     // Lấy thêm metadata từ body (optional)
@@ -195,7 +199,7 @@ router.post('/upload', requireAction('upload:contracts'), upload.single('file'),
     const contract = await createContractFromUpload({
       companyId,
       userId: req.user?.id || null,
-      originalName: req.file.originalname,
+      originalName,
       mimeType: req.file.mimetype || ext,
       fileSize: req.file.size,
       filePath: relativePath,
@@ -220,7 +224,7 @@ router.post('/upload', requireAction('upload:contracts'), upload.single('file'),
     res.json({
       message: 'Tải văn bản thành công',
       contractId: contract?.id || null,
-      fileName: req.file.originalname,
+      fileName: originalName,
       file_url: getFileUrl(relativePath),
       textPreview: extractedText.substring(0, 500) + '...',
       textLength: extractedText.length,

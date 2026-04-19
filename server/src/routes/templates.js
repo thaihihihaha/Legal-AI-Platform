@@ -43,8 +43,16 @@ router.post('/:templateId/generate', async (req, res) => {
 router.post('/:templateId/export', async (req, res) => {
   const { format = 'docx', text = '', title = 'Generated Document' } = req.body || {};
 
-  if (!text || typeof text !== 'string') {
-    return res.status(400).json({ error: 'text là bắt buộc để export.' });
+  // Cho phép string rỗng '', nhưng reject null/undefined
+  if (text === null || text === undefined || typeof text !== 'string') {
+    return res.status(400).json({ 
+      error: 'Trường "text" là bắt buộc và phải là một string.' 
+    });
+  }
+
+  // Cảnh báo nếu text quá ngắn
+  if (text.trim().length === 0) {
+    console.warn(`[WARN] Xuất văn bản rỗng cho: ${title}`);
   }
 
   try {

@@ -48,6 +48,12 @@ model Company {
   categories    Category[]
   tags          Tag[]
   audit_logs    AuditLog[]
+  drafts        DraftGenerated[]
+  clauses       Clause[] @relation("Clauses")
+  integration_configs IntegrationConfig[] @relation("IntegrationConfigs")
+  team_metrics  TeamMetric[]       @relation("TeamMetrics")
+  analytics     Analytic[]         @relation("Analytics")
+  webhooks      Webhook[] @relation("Webhooks")
 
   @@map("companies")
 }
@@ -99,6 +105,42 @@ model User {
   audit_logs      AuditLog[]     @relation("AuditLogByActor")
   invitations_created InvitationToken[] @relation("InvitationCreateBy")
   refresh_tokens  RefreshToken[] @relation("RefreshTokens")
+  drafts_created  DraftGenerated[] @relation("DraftCreatedBy")
+  draft_versions_changed DraftVersion[] @relation("DraftVersionChangedBy")
+  
+  // PHASE 3 Relations
+  review_sessions_initiated ReviewSession[] @relation("ReviewSessionInitiatedBy")
+  review_assignments ReviewAssignment[] @relation("ReviewAssignments")
+  review_comments ReviewComment[] @relation("ReviewComments")
+  review_comments_resolved ReviewComment[] @relation("ReviewCommentResolvedBy")
+  draft_access DraftAccess[] @relation("DraftAccess")
+  draft_access_granted DraftAccess[] @relation("DraftAccessGrantedBy")
+  draft_collaborators DraftCollaborator[] @relation("DraftCollaborators")
+  activity_logs ActivityLog[]
+  notifications Notification[]
+  notifications_about Notification[] @relation("NotificationsAboutUser")
+  notification_preferences NotificationPreference[]
+  draft_sharing_by DraftSharing[] @relation("DraftSharingBy")
+  draft_sharing_with DraftSharing[] @relation("DraftSharingWith")
+  draft_sharing_revoked DraftSharing[] @relation("DraftSharingRevokedBy")
+  mentions Mention[]
+  audit_trails AuditTrail[]
+  signatures DigitalSignature[]
+  legal_holds_created LegalHold[] @relation("LegalHoldsCreated")
+  legal_holds_lifted LegalHold[] @relation("LegalHoldsLifted")
+  compliance_checks ComplianceCheck[]
+  template_versions TemplateVersion[]
+  export_history ExportHistory[]
+  approval_stages ApprovalStage[]
+  delegated_approvals ApprovalStage[] @relation("DelegatedApprovals")
+  reminders Reminder[]
+  reminders_created Reminder[] @relation("RemindersCreated")
+  notification_queues NotificationQueue[]
+  risk_assessments RiskAssessment[]
+  saved_searches SavedSearch[]
+  webhooks Webhook[] @relation("Webhooks")
+  integration_configs IntegrationConfig[] @relation("IntegrationConfigs")
+  clauses Clause[] @relation("Clauses")
 
   @@index([company_id])
   @@index([email])
@@ -113,16 +155,16 @@ model Contract {
   category_id      String?   @db.Uuid
   name             String    @db.VarChar(500)
   contract_type    String?   @db.VarChar(100)
-  file_type        String?   @db.VarChar(50)
+  file_type        String?   @db.VarChar(200)
   file_path        String?                    // đường dẫn tương đối từ UPLOAD_DIR
   file_size        Int?
-  extracted_text   String?
+  extracted_text   String?   @db.Text
   status           String?   @default("active") @db.VarChar(50)
   workflow_status  String?   @default("draft") @db.VarChar(50) // draft|pending_review|approved|signed|active|expired|terminated
   review_result    Json?
   metadata         Json?     @default("{}")
-  content          String?
-  notes            String?                    // ghi chú nội bộ
+  content          String?   @db.Text
+  notes            String?   @db.Text               // ghi chú nội bộ
   // Thông tin pháp lý
   effective_date   DateTime? @db.Timestamptz()
   expiry_date      DateTime? @db.Timestamptz()
@@ -217,8 +259,8 @@ model Document {
   file_path        String                    // đường dẫn tương đối từ UPLOAD_DIR
   file_size        Int?
   mime_type        String?   @db.VarChar(100)
-  extracted_text   String?
-  content          String?                   // full text extracted content
+  extracted_text   String?   @db.Text
+  content          String?   @db.Text              // full text extracted content
   status           String?   @default("active") @db.VarChar(50)
   workflow_status  String?   @default("draft") @db.VarChar(50) // draft|review|approved|archived
   analysis         Json?                     // AI analysis results (document_type, main_topics, suggested_tags, summary, recommended_category)
@@ -298,6 +340,85 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// ── Draft Generated (Mẫu văn bản đã tạo từ templates) ─────────────────────────
+model DraftGenerated {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id          String    @db.Uuid
+  user_id             String    @db.Uuid
+  template_id         String?   @db.VarChar(100)  // reference to template ID
+  title               String?   @db.VarChar(500)  // Tên draft hoặc title
+  content             String?   @db.Text          // HTML content từ TipTap editor
+  research_data       Json?     @default("{}")    // Citations từ searchLegalEvidence()
+  validation_result   Json?     @default("{}")    // {valid: bool, errors: [], warnings: [], suggestions: []}
+  status              String    @default("draft") @db.VarChar(50)  // 'draft'|'review'|'approved'|'signed'
+  version             Int       @default(1)        // Current version number
+  review_status       String    @default("not_reviewed") @db.VarChar(50)
+  review_started_at   DateTime? @db.Timestamptz()
+  review_completed_at DateTime? @db.Timestamptz()
+  has_legal_hold      Boolean   @default(false)
+  overall_compliance_score Decimal? @db.Decimal(5, 2)
+  is_signed           Boolean   @default(false)
+  signed_at           DateTime? @db.Timestamptz()
+  signed_by           String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamptz()
+  updated_at          DateTime? @default(now()) @db.Timestamptz()
+  created_by          String?   @db.Uuid          // User who created
+  updated_by          String?   @db.Uuid          // User who last updated
+
+  company             Company            @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  creator             User?              @relation("DraftCreatedBy", fields: [user_id], references: [id], onDelete: SetNull)
+  versions            DraftVersion[]
+  access_grants       DraftAccess[]
+  collaborators       DraftCollaborator[]
+  activity_logs       ActivityLog[]
+  sharing_records     DraftSharing[]
+  review_sessions     ReviewSession[]
+  review_comments     ReviewComment[]
+  risk_assessments    RiskAssessment[]
+  approval_routes     ApprovalRoute[]
+  audit_trails        AuditTrail[]
+  signatures          DigitalSignature[]
+  legal_holds         LegalHold[]
+  compliance_checks   ComplianceCheck[]
+  lifecycle_records   DocumentLifecycle[]
+  search_indexes      SearchIndex[]
+  clause_suggestions  ClauseSuggestion[]
+  clause_conflicts    ClauseConflict[]
+  exports             ExportHistory[]
+  notifications       Notification[]
+  reminders           Reminder[]
+  signer              User?              @relation("DraftSignedBy", fields: [signed_by], references: [id], onDelete: SetNull)
+
+  @@index([company_id])
+  @@index([user_id])
+  @@index([template_id])
+  @@index([status])
+  @@index([review_status])
+  @@index([has_legal_hold])
+  @@index([is_signed])
+  @@index([created_at(sort: Desc)])
+  @@map("drafts_generated")
+}
+
+// ── Version Control for Drafts ──────────────────────────────────────────────
+model DraftVersion {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id    String    @db.Uuid
+  version     Int
+  content     String?   @db.Text          // HTML content at this version
+  changed_by  String?   @db.Uuid          // User who made the change
+  summary     String?   @db.VarChar(255)  // Change summary
+  created_at  DateTime? @default(now()) @db.Timestamptz()
+
+  draft      DraftGenerated @relation(fields: [draft_id], references: [id], onDelete: Cascade)
+  updater    User?          @relation("DraftVersionChangedBy", fields: [changed_by], references: [id], onDelete: SetNull)
+
+  @@unique([draft_id, version])
+  @@index([draft_id])
+  @@index([created_at])
+  @@map("draft_versions")
+}
+
 model InvitationToken {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email       String    @db.VarChar(255)
@@ -331,3 +452,840 @@ model RefreshToken {
   @@index([expires_at])
   @@map("refresh_tokens")
 }
+
+// ============================================
+// PHASE 3.1: AI-Powered Contract Review System
+// ============================================
+
+enum ReviewStatus {
+  pending
+  in_review
+  completed
+  cancelled
+}
+
+enum ReviewType {
+  standard
+  expedited
+  compliance_check
+}
+
+enum ReviewAssignmentStatus {
+  pending
+  reviewed
+  approved
+  rejected
+}
+
+enum ReviewAssignmentRole {
+  reviewer
+  approver
+  observer
+}
+
+model ReviewSession {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id       String                @db.Uuid
+  initiated_by   String                @db.Uuid
+  status         ReviewStatus          @default(pending)
+  start_date     DateTime?             @default(now()) @db.Timestamptz()
+  end_date       DateTime?             @db.Timestamptz()
+  due_date       DateTime?             @db.Timestamptz()
+  review_type    ReviewType            @default(standard)
+  notes          String?
+  created_at     DateTime?             @default(now()) @db.Timestamptz()
+  updated_at     DateTime?             @default(now()) @db.Timestamptz()
+
+  draft          DraftGenerated        @relation(fields: [draft_id], references: [id], onDelete: Cascade)
+  initiator      User                  @relation("ReviewSessionInitiatedBy", fields: [initiated_by], references: [id], onDelete: Cascade)
+  assignments    ReviewAssignment[]
+  comments       ReviewComment[]
+  risk_assessments RiskAssessment[]
+
+  @@index([draft_id])
+  @@index([status])
+  @@index([initiated_by])
+  @@map("review_sessions")
+}
+
+model ReviewAssignment {
+  id           String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id   String                    @db.Uuid
+  reviewer_id  String                    @db.Uuid
+  role         ReviewAssignmentRole      @default(reviewer)
+  status       ReviewAssignmentStatus    @default(pending)
+  assigned_at  DateTime?                 @default(now()) @db.Timestamptz()
+  reviewed_at  DateTime?                 @db.Timestamptz()
+  notes        String?
+
+  session      ReviewSession             @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  reviewer     User                      @relation("ReviewAssignments", fields: [reviewer_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, reviewer_id])
+  @@index([session_id])
+  @@index([reviewer_id])
+  @@index([status])
+  @@map("review_assignments")
+}
+
+enum CommentType {
+  comment
+  suggestion
+  requirement
+  note
+}
+
+enum CommentSeverity {
+  critical
+  high
+  medium
+  low
+  info
+}
+
+model ReviewComment {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id        String          @db.Uuid
+  draft_id          String          @db.Uuid
+  commenter_id      String          @db.Uuid
+  content           String          @db.Text
+  clause_reference  String?         @db.VarChar(255)
+  comment_type      CommentType     @default(comment)
+  severity          CommentSeverity @default(info)
+  resolved          Boolean         @default(false)
+  resolved_by       String?         @db.Uuid
+  resolved_at       DateTime?       @db.Timestamptz()
+  parent_comment_id String?         @db.Uuid
+  created_at        DateTime?       @default(now()) @db.Timestamptz()
+  updated_at        DateTime?       @default(now()) @db.Timestamptz()
+
+  session           ReviewSession   @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  draft             DraftGenerated  @relation("ReviewComments", fields: [draft_id], references: [id], onDelete: Cascade)
+  commenter         User            @relation("ReviewComments", fields: [commenter_id], references: [id], onDelete: Cascade)
+  resolver          User?           @relation("ReviewCommentResolvedBy", fields: [resolved_by], references: [id], onDelete: SetNull)
+  parent            ReviewComment?  @relation("ReviewCommentReplies", fields: [parent_comment_id], references: [id], onDelete: Cascade)
+  replies           ReviewComment[] @relation("ReviewCommentReplies")
+  mentions          Mention[]
+
+  @@index([session_id])
+  @@index([draft_id])
+  @@index([commenter_id])
+  @@index([resolved])
+  @@index([severity])
+  @@map("review_comments")
+}
+
+model RiskAssessment {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id             String    @db.Uuid
+  session_id           String    @db.Uuid
+  assessed_by          String?   @db.Uuid
+  overall_risk_level   String    @db.VarChar(50) // critical, high, medium, low
+  compliance_score     Decimal?  @db.Decimal(5, 2)
+  assessment_date      DateTime? @default(now()) @db.Timestamptz()
+  legal_risks          Json?     @default("[]")
+  compliance_risks     Json?     @default("[]")
+  operational_risks    Json?     @default("[]")
+  financial_risks      Json?     @default("[]")
+  recommendations      Json?     @default("[]")
+  status               String    @default("completed") @db.VarChar(50)
+  notes                String?
+  created_at           DateTime? @default(now()) @db.Timestamptz()
+  updated_at           DateTime? @default(now()) @db.Timestamptz()
+
+  draft                DraftGenerated    @relation(fields: [draft_id], references: [id], onDelete: Cascade)
+  session              ReviewSession     @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  assessor             User?             @relation("RiskAssessments", fields: [assessed_by], references: [id], onDelete: SetNull)
+
+  @@index([draft_id])
+  @@index([session_id])
+  @@index([overall_risk_level])
+  @@map("risk_assessments")
+}
+
+enum ApprovalRouteStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
+model ApprovalRoute {
+  id            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id      String                @db.Uuid
+  route_name    String?               @db.VarChar(100)
+  approvers     Json                  @default("[]") // Array of {user_id, order, status}
+  current_stage Int                   @default(1)
+  status        ApprovalRouteStatus   @default(pending)
+  started_at    DateTime?             @default(now()) @db.Timestamptz()
+  completed_at  DateTime?             @db.Timestamptz()
+  notes         String?
+  created_at    DateTime?             @default(now()) @db.Timestamptz()
+
+  draft         DraftGenerated        @relation(fields: [draft_id], references: [id], onDelete: Cascade)
+  stages        ApprovalStage[]
+
+  @@index([draft_id])
+  @@index([status])
+  @@map("approval_routes")
+}
+
+enum ApprovalStageStatus {
+  pending
+  approved
+  rejected
+  delegated
+}
+
+model ApprovalStage {
+  id           String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  route_id     String               @db.Uuid
+  stage_number Int
+  approver_id  String               @db.Uuid
+  status       ApprovalStageStatus  @default(pending)
+  decision_date DateTime?            @db.Timestamptz()
+  notes        String?
+  delegated_to String?              @db.Uuid
+  created_at   DateTime?            @default(now()) @db.Timestamptz()
+  updated_at   DateTime?            @default(now()) @db.Timestamptz()
+
+  route        ApprovalRoute        @relation(fields: [route_id], references: [id], onDelete: Cascade)
+  approver     User                 @relation("ApprovalStages", fields: [approver_id], references: [id], onDelete: Cascade)
+  delegate     User?                @relation("DelegatedApprovals", fields: [delegated_to], references: [id], onDelete: SetNull)
+
+  @@unique([route_id, stage_number, approver_id])
+  @@index([route_id])
+  @@index([approver_id])
+  @@index([status])
+  @@map("approval_stages")
+}
+
+// ============================================
+// PHASE 3.2: Multi-User Collaboration
+// ============================================
+
+enum DraftAccessRole {
+  owner
+  editor
+  reviewer
+  viewer
+}
+
+model DraftAccess {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id    String           @db.Uuid
+  user_id     String           @db.Uuid
+  role        DraftAccessRole  @default(viewer)
+  granted_by  String?          @db.Uuid
+  granted_at  DateTime?        @default(now()) @db.Timestamptz()
+  expires_at  DateTime?        @db.Timestamptz()
+  can_share   Boolean          @default(false)
+  can_delete  Boolean          @default(false)
+  updated_at  DateTime?        @default(now()) @db.Timestamptz()
+
+  draft       DraftGenerated   @relation("DraftAccess", fields: [draft_id], references: [id], onDelete: Cascade)
+  user        User             @relation("DraftAccess", fields: [user_id], references: [id], onDelete: Cascade)
+  granter     User?            @relation("DraftAccessGrantedBy", fields: [granted_by], references: [id], onDelete: SetNull)
+
+  @@unique([draft_id, user_id])
+  @@index([draft_id])
+  @@index([user_id])
+  @@index([role])
+  @@map("draft_access")
+}
+
+model DraftCollaborator {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id           String          @db.Uuid
+  user_id            String          @db.Uuid
+  last_viewed_at     DateTime?       @default(now()) @db.Timestamptz()
+  is_currently_editing Boolean       @default(false)
+  cursor_position    Int?
+  last_activity      DateTime?       @default(now()) @db.Timestamptz()
+  session_id         String?         @db.VarChar(255)
+
+  draft              DraftGenerated  @relation("DraftCollaborators", fields: [draft_id], references: [id], onDelete: Cascade)
+  user               User            @relation("DraftCollaborators", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([draft_id, user_id])
+  @@index([draft_id])
+  @@index([user_id])
+  @@index([is_currently_editing])
+  @@map("draft_collaborators")
+}
+
+enum ActivityAction {
+  created
+  updated
+  deleted
+  shared
+  commented
+  approved
+  rejected
+}
+
+enum ActivityActionType {
+  content_change
+  status_change
+  permission_change
+  review_action
+  other
+}
+
+model ActivityLog {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id     String            @db.Uuid
+  user_id      String            @db.Uuid
+  action       ActivityAction
+  action_type  ActivityActionType
+  changes      Json?             @default("{}")
+  description  String?
+  ip_address   String?
+  user_agent   String?
+  metadata     Json?             @default("{}")
+  created_at   DateTime?         @default(now()) @db.Timestamptz()
+
+  draft        DraftGenerated    @relation("ActivityLogs", fields: [draft_id], references: [id], onDelete: Cascade)
+  actor        User              @relation("ActivityLogs", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([user_id])
+  @@index([action])
+  @@index([created_at(sort: Desc)])
+  @@map("activity_logs")
+}
+
+enum NotificationType {
+  draft_shared
+  draft_commented
+  approval_requested
+  review_complete
+  review_started
+  status_changed
+  access_granted
+}
+
+model Notification {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String             @db.Uuid
+  title             String             @db.VarChar(255)
+  message           String             @db.Text
+  notification_type NotificationType
+  related_draft_id  String?            @db.Uuid
+  related_user_id   String?            @db.Uuid
+  action_url        String?
+  is_read           Boolean            @default(false)
+  read_at           DateTime?          @db.Timestamptz()
+  created_at        DateTime?          @default(now()) @db.Timestamptz()
+  expires_at        DateTime?          @db.Timestamptz()
+
+  user              User               @relation("Notifications", fields: [user_id], references: [id], onDelete: Cascade)
+  draft             DraftGenerated?    @relation("Notifications", fields: [related_draft_id], references: [id], onDelete: SetNull)
+  related_user      User?              @relation("NotificationsAboutUser", fields: [related_user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([is_read])
+  @@index([created_at])
+  @@index([related_draft_id])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String    @db.Uuid
+  notification_type   NotificationType
+  email_enabled       Boolean   @default(true)
+  in_app_enabled      Boolean   @default(true)
+  sms_enabled         Boolean   @default(false)
+  updated_at          DateTime? @default(now()) @db.Timestamptz()
+
+  user                User      @relation("NotificationPreferences", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, notification_type])
+  @@index([user_id])
+  @@map("notification_preferences")
+}
+
+model DraftSharing {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id     String    @db.Uuid
+  shared_by    String    @db.Uuid
+  shared_with  String    @db.Uuid
+  role         DraftAccessRole @default(viewer)
+  access_level String    @default("limited") @db.VarChar(50)
+  shared_at    DateTime? @default(now()) @db.Timestamptz()
+  expires_at   DateTime? @db.Timestamptz()
+  revoked_at   DateTime? @db.Timestamptz()
+  revoked_by   String?   @db.Uuid
+
+  draft        DraftGenerated @relation("DraftSharing", fields: [draft_id], references: [id], onDelete: Cascade)
+  sharer       User     @relation("DraftSharingBy", fields: [shared_by], references: [id], onDelete: Cascade)
+  recipient    User     @relation("DraftSharingWith", fields: [shared_with], references: [id], onDelete: Cascade)
+  revoker      User?    @relation("DraftSharingRevokedBy", fields: [revoked_by], references: [id], onDelete: SetNull)
+
+  @@index([draft_id])
+  @@index([shared_by])
+  @@index([shared_with])
+  @@map("draft_sharing")
+}
+
+model Mention {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  comment_id        String    @db.Uuid
+  mentioned_user_id String    @db.Uuid
+  mentioned_at      DateTime? @default(now()) @db.Timestamptz()
+
+  comment           ReviewComment @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  mentioned_user    User          @relation("Mentions", fields: [mentioned_user_id], references: [id], onDelete: Cascade)
+
+  @@index([mentioned_user_id])
+  @@map("mentions")
+}
+
+// ============================================
+// PHASE 3.3: Compliance & Audit Trail
+// ============================================
+
+model AuditTrail {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id         String    @db.Uuid
+  entity_type      String    @db.VarChar(50)
+  entity_id        String?   @db.Uuid
+  action           String    @db.VarChar(100)
+  performed_by     String    @db.Uuid
+  changes          Json?     @default("{}")
+  old_values       Json?     @default("{}")
+  new_values       Json?     @default("{}")
+  ip_address       String?
+  user_agent       String?
+  session_id       String?   @db.VarChar(255)
+  status           String?   @default("success") @db.VarChar(50)
+  error_message    String?
+  timestamp        DateTime? @default(now()) @db.Timestamptz()
+
+  draft            DraftGenerated @relation("AuditTrails", fields: [draft_id], references: [id], onDelete: Cascade)
+  actor            User           @relation("AuditTrails", fields: [performed_by], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([performed_by])
+  @@index([timestamp])
+  @@map("audit_trails")
+}
+
+model DigitalSignature {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id          String    @db.Uuid
+  signed_by         String    @db.Uuid
+  signature_method  String    @db.VarChar(50) // pkcs7, xmldsig, timestamp, biometric
+  signature_data    String    @db.Text
+  certificate_info  Json?     @default("{}")
+  timestamp         DateTime? @default(now()) @db.Timestamptz()
+  signature_hash    String?   @db.VarChar(255)
+  is_valid          Boolean   @default(true)
+  valid_until       DateTime? @db.Timestamptz()
+  signed_version_id String?   @db.Uuid
+  metadata          Json?     @default("{}")
+
+  draft             DraftGenerated @relation("DigitalSignatures", fields: [draft_id], references: [id], onDelete: Cascade)
+  signer            User           @relation("DigitalSignatures", fields: [signed_by], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([signed_by])
+  @@index([timestamp])
+  @@index([is_valid])
+  @@map("digital_signatures")
+}
+
+model LegalHold {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id     String    @db.Uuid
+  reason       String    @db.VarChar(255)
+  created_by   String    @db.Uuid
+  created_at   DateTime? @default(now()) @db.Timestamptz()
+  lifted_by    String?   @db.Uuid
+  lifted_at    DateTime? @db.Timestamptz()
+  hold_status  String    @default("active") @db.VarChar(50)
+  expiry_date  DateTime? @db.Timestamptz()
+  description  String?
+  case_number  String?   @db.VarChar(100)
+  metadata     Json?     @default("{}")
+
+  draft        DraftGenerated @relation("LegalHolds", fields: [draft_id], references: [id], onDelete: Cascade)
+  holder       User           @relation("LegalHoldsCreated", fields: [created_by], references: [id], onDelete: Cascade)
+  lifter       User?          @relation("LegalHoldsLifted", fields: [lifted_by], references: [id], onDelete: SetNull)
+
+  @@index([draft_id])
+  @@index([hold_status])
+  @@map("legal_holds")
+}
+
+model ComplianceCheck {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id             String    @db.Uuid
+  standard_name        String    @db.VarChar(100)
+  jurisdiction         String?   @db.VarChar(50)
+  compliance_status    String    @default("unchecked") @db.VarChar(50)
+  compliance_score     Decimal?  @db.Decimal(5, 2)
+  last_checked_at      DateTime? @default(now()) @db.Timestamptz()
+  checked_by           String?   @db.Uuid
+  findings             Json?     @default("[]")
+  remediation_items    Json?     @default("[]")
+  next_review_date     DateTime? @db.Timestamptz()
+  metadata             Json?     @default("{}")
+
+  draft                DraftGenerated @relation("ComplianceChecks", fields: [draft_id], references: [id], onDelete: Cascade)
+  checker              User?          @relation("ComplianceChecks", fields: [checked_by], references: [id], onDelete: SetNull)
+
+  @@index([draft_id])
+  @@index([standard_name])
+  @@index([compliance_status])
+  @@map("compliance_checks")
+}
+
+model DocumentLifecycle {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id   String    @db.Uuid
+  stage      String    @db.VarChar(50) // draft, review, approved, executed, archived, destroyed
+  entered_at DateTime? @default(now()) @db.Timestamptz()
+  exited_at  DateTime? @db.Timestamptz()
+  metadata   Json?     @default("{}")
+
+  draft      DraftGenerated @relation("DocumentLifecycle", fields: [draft_id], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([stage])
+  @@map("document_lifecycle")
+}
+
+// ============================================
+// PHASE 3.4: Search & Analytics
+// ============================================
+
+model SearchIndex {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id        String    @db.Uuid
+  indexed_content String?   @db.Text
+  keywords        String[]  @default([])
+  indexed_at      DateTime? @default(now()) @db.Timestamptz()
+  updated_at      DateTime? @default(now()) @db.Timestamptz()
+
+  draft           DraftGenerated @relation("SearchIndexes", fields: [draft_id], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([keywords])
+  @@map("search_indexes")
+}
+
+model SavedSearch {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String    @db.Uuid
+  search_name       String    @db.VarChar(100)
+  search_criteria   Json      @default("{}")
+  is_favorite       Boolean   @default(false)
+  created_at        DateTime? @default(now()) @db.Timestamptz()
+  last_used_at      DateTime? @db.Timestamptz()
+
+  user              User      @relation("SavedSearches", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([is_favorite])
+  @@map("saved_searches")
+}
+
+model Analytic {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id       String?   @db.Uuid
+  company_id     String?   @db.Uuid
+  metric_type    String    @db.VarChar(50)
+  metric_value   Decimal?  @db.Decimal(10, 2)
+  metric_unit    String?   @db.VarChar(50)
+  recorded_at    DateTime? @default(now()) @db.Timestamptz()
+  period         String?   @db.VarChar(50)
+
+  draft          DraftGenerated? @relation("Analytics", fields: [draft_id], references: [id], onDelete: SetNull)
+  company        Company?        @relation("Analytics", fields: [company_id], references: [id], onDelete: SetNull)
+
+  @@index([draft_id])
+  @@index([company_id])
+  @@index([metric_type])
+  @@index([recorded_at])
+  @@map("analytics")
+}
+
+model TeamMetric {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id       String    @db.Uuid
+  team_id          String?
+  date_period      DateTime  @db.Date
+  contracts_created Int      @default(0)
+  contracts_reviewed Int     @default(0)
+  contracts_approved Int     @default(0)
+  avg_review_time  Decimal?  @db.Decimal(8, 2)
+  avg_approval_time Decimal? @db.Decimal(8, 2)
+  active_users     Int       @default(0)
+  recorded_at      DateTime? @default(now()) @db.Timestamptz()
+
+  company          Company   @relation("TeamMetrics", fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([date_period])
+  @@map("team_metrics")
+}
+
+// ============================================
+// PHASE 3.5: Template & Clause Library
+// ============================================
+
+model TemplateVersion {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  template_id     String    @db.Uuid // Reference to Template model
+  version_number  Int
+  content         String    @db.Text
+  change_description String?
+  created_by      String    @db.Uuid
+  created_at      DateTime? @default(now()) @db.Timestamptz()
+  is_current      Boolean   @default(false)
+
+  creator         User      @relation("TemplateVersions", fields: [created_by], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, version_number])
+  @@index([template_id])
+  @@map("template_versions")
+}
+
+model Clause {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id          String    @db.Uuid
+  clause_name         String    @db.VarChar(255)
+  category            String    @db.VarChar(100)
+  content             String    @db.Text
+  tags                String[]  @default([])
+  jurisdiction        String?   @db.VarChar(50)
+  effectiveness_score Decimal?  @db.Decimal(3, 2)
+  usage_count         Int       @default(0)
+  is_active           Boolean   @default(true)
+  created_by          String?   @db.Uuid
+  created_at          DateTime? @default(now()) @db.Timestamptz()
+  updated_at          DateTime? @default(now()) @db.Timestamptz()
+
+  company             Company   @relation("Clauses", fields: [company_id], references: [id], onDelete: Cascade)
+  creator             User?     @relation("Clauses", fields: [created_by], references: [id], onDelete: SetNull)
+  suggestions         ClauseSuggestion[]
+  conflicts_as_1      ClauseConflict[] @relation("ClauseConflict_Clause1")
+  conflicts_as_2      ClauseConflict[] @relation("ClauseConflict_Clause2")
+
+  @@index([company_id])
+  @@index([category])
+  @@index([tags])
+  @@index([jurisdiction])
+  @@index([is_active])
+  @@map("clauses")
+}
+
+model ClauseSuggestion {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id           String    @db.Uuid
+  clause_id          String    @db.Uuid
+  suggestion_reason  String    @db.VarChar(255)
+  confidence_score   Decimal?  @db.Decimal(3, 2)
+  user_accepted      Boolean?
+  accepted_at        DateTime? @db.Timestamptz()
+  created_at         DateTime? @default(now()) @db.Timestamptz()
+
+  draft              DraftGenerated @relation("ClauseSuggestions", fields: [draft_id], references: [id], onDelete: Cascade)
+  clause             Clause         @relation(fields: [clause_id], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([clause_id])
+  @@index([user_accepted])
+  @@map("clause_suggestions")
+}
+
+model ClauseConflict {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id       String    @db.Uuid
+  clause_id_1    String    @db.Uuid
+  clause_id_2    String    @db.Uuid
+  conflict_type  String    @db.VarChar(100)
+  severity       String    @db.VarChar(50)
+  resolution_notes String?
+  detected_at    DateTime? @default(now()) @db.Timestamptz()
+
+  draft          DraftGenerated @relation("ClauseConflicts", fields: [draft_id], references: [id], onDelete: Cascade)
+  clause_1       Clause         @relation("ClauseConflict_Clause1", fields: [clause_id_1], references: [id], onDelete: Cascade)
+  clause_2       Clause         @relation("ClauseConflict_Clause2", fields: [clause_id_2], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([severity])
+  @@map("clause_conflicts")
+}
+
+// ============================================
+// PHASE 3.6: Notifications & Reminders
+// ============================================
+
+model Reminder {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assigned_to      String    @db.Uuid
+  related_draft_id String?   @db.Uuid
+  reminder_type    String    @db.VarChar(50)
+  title            String    @db.VarChar(255)
+  description      String?
+  due_date         DateTime  @db.Date
+  due_time         DateTime? @db.Time
+  priority         String    @default("medium") @db.VarChar(50)
+  status           String    @default("pending") @db.VarChar(50)
+  reminder_sent_at DateTime? @db.Timestamptz()
+  completed_at     DateTime? @db.Timestamptz()
+  created_by       String?   @db.Uuid
+  created_at       DateTime? @default(now()) @db.Timestamptz()
+
+  assignee         User           @relation("Reminders", fields: [assigned_to], references: [id], onDelete: Cascade)
+  draft            DraftGenerated? @relation("Reminders", fields: [related_draft_id], references: [id], onDelete: SetNull)
+  creator          User?          @relation("RemindersCreated", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([assigned_to])
+  @@index([due_date])
+  @@index([status])
+  @@index([priority])
+  @@map("reminders")
+}
+
+model ReminderSchedule {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String    @db.Uuid
+  reminder_type     String    @db.VarChar(50)
+  recurrence        String    @db.VarChar(50)
+  recurrence_pattern Json?    @default("{}")
+  is_active         Boolean   @default(true)
+  created_at        DateTime? @default(now()) @db.Timestamptz()
+
+  user              User      @relation("ReminderSchedules", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([is_active])
+  @@map("reminder_schedules")
+}
+
+model NotificationQueue {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  notification_type NotificationType
+  channel          String    @db.VarChar(50)
+  message          Json      @default("{}")
+  scheduled_for    DateTime? @default(now()) @db.Timestamptz()
+  sent_at          DateTime? @db.Timestamptz()
+  delivery_status  String    @default("pending") @db.VarChar(50)
+  retry_count      Int       @default(0)
+  max_retries      Int       @default(3)
+  error_message    String?
+  created_at       DateTime? @default(now()) @db.Timestamptz()
+
+  user             User      @relation("NotificationQueues", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([delivery_status])
+  @@index([scheduled_for])
+  @@map("notification_queues")
+}
+
+// ============================================
+// PHASE 3.7: Export & Integrations
+// ============================================
+
+model IntegrationConfig {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id        String    @db.Uuid
+  integration_type  String    @db.VarChar(100)
+  is_enabled        Boolean   @default(true)
+  config_data       Json      @default("{}")
+  created_by        String?   @db.Uuid
+  created_at        DateTime? @default(now()) @db.Timestamptz()
+  updated_at        DateTime? @default(now()) @db.Timestamptz()
+  last_used_at      DateTime? @db.Timestamptz()
+
+  company           Company   @relation("IntegrationConfigs", fields: [company_id], references: [id], onDelete: Cascade)
+  creator           User?     @relation("IntegrationConfigs", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([company_id])
+  @@index([integration_type])
+  @@index([is_enabled])
+  @@map("integration_configs")
+}
+
+model ExportHistory {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draft_id        String    @db.Uuid
+  exported_by     String    @db.Uuid
+  export_type     String    @db.VarChar(50)
+  export_format   String?   @db.VarChar(50)
+  file_size_bytes Int?
+  file_hash       String?   @db.VarChar(255)
+  export_metadata Json?     @default("{}")
+  created_at      DateTime? @default(now()) @db.Timestamptz()
+
+  draft           DraftGenerated @relation("ExportHistory", fields: [draft_id], references: [id], onDelete: Cascade)
+  exporter        User           @relation("ExportHistory", fields: [exported_by], references: [id], onDelete: Cascade)
+
+  @@index([draft_id])
+  @@index([exported_by])
+  @@index([created_at])
+  @@map("export_history")
+}
+
+model Webhook {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id      String    @db.Uuid
+  webhook_url     String    @db.Text
+  webhook_secret  String?   @db.VarChar(255)
+  events          String[]  @default([])
+  is_active       Boolean   @default(true)
+  created_by      String?   @db.Uuid
+  created_at      DateTime? @default(now()) @db.Timestamptz()
+  updated_at      DateTime? @default(now()) @db.Timestamptz()
+  last_triggered_at DateTime? @db.Timestamptz()
+  failure_count   Int       @default(0)
+
+  company         Company   @relation("Webhooks", fields: [company_id], references: [id], onDelete: Cascade)
+  creator         User?     @relation("Webhooks", fields: [created_by], references: [id], onDelete: SetNull)
+  deliveries      WebhookDelivery[]
+
+  @@index([company_id])
+  @@index([is_active])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhook_id        String    @db.Uuid
+  event_type        String    @db.VarChar(100)
+  payload           Json      @default("{}")
+  response_status_code Int?
+  response_body     String?
+  delivery_status   String    @default("pending") @db.VarChar(50)
+  retry_count       Int       @default(0)
+  delivered_at      DateTime? @db.Timestamptz()
+  created_at        DateTime? @default(now()) @db.Timestamptz()
+
+  webhook           Webhook   @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
+
+  @@index([webhook_id])
+  @@index([delivery_status])
+  @@index([created_at])
+  @@map("webhook_deliveries")
+}
+
+// ==========================================
+// Update DraftGenerated with PHASE 3 fields
+// ==========================================
+
+// Note: Already extended DraftGenerated model via relations above
+// Additional fields to add:
+// - review_status (ReviewStatus enum or VARCHAR)
+// - review_started_at (DateTime)
+// - review_completed_at (DateTime)
+// - has_legal_hold (Boolean)
+// - overall_compliance_score (Decimal)
+// - is_signed (Boolean)
+// - signed_at (DateTime)
+// - signed_by (String UUID)
