@@ -1,11 +1,13 @@
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import PDFDocument from 'pdfkit';
 
+console.log('[TEMPLATESERVICE] Module loaded at', new Date().toISOString());
+
 const templateCatalog = [
   {
     id: 'labor_contract_basic',
     name: 'Hợp đồng lao động cơ bản',
-    category: 'Hợp đồng',
+    category: 'Hợp đồng lao động',
     description: 'Mẫu hợp đồng lao động với điều khoản cốt lõi theo Bộ luật Lao động.',
     required_fields: ['company_name', 'employee_name', 'position', 'salary', 'work_location', 'start_date'],
     sections: ['Thông tin các bên', 'Vị trí và phạm vi công việc', 'Thời hạn hợp đồng', 'Lương và phụ cấp', 'Thời giờ làm việc, nghỉ ngơi', 'Bảo mật và xử lý vi phạm', 'Điều khoản chấm dứt'],
@@ -13,7 +15,7 @@ const templateCatalog = [
   {
     id: 'service_contract_basic',
     name: 'Hợp đồng dịch vụ cơ bản',
-    category: 'Hợp đồng',
+    category: 'Hợp đồng dịch vụ',
     description: 'Mẫu hợp đồng dịch vụ B2B chuẩn với điều khoản nghiệm thu và thanh toán.',
     required_fields: ['client_name', 'vendor_name', 'service_scope', 'fee', 'payment_terms', 'effective_date'],
     sections: ['Đối tượng dịch vụ', 'Tiến độ thực hiện', 'Phí và phương thức thanh toán', 'Nghiệm thu và bàn giao', 'Bảo mật thông tin', 'Giải quyết tranh chấp'],
@@ -21,10 +23,37 @@ const templateCatalog = [
   {
     id: 'official_notice',
     name: 'Thông báo nội bộ',
-    category: 'Văn bản hành chính',
+    category: 'Thông báo',
     description: 'Mẫu thông báo nội bộ cho doanh nghiệp.',
     required_fields: ['issuer_name', 'notice_subject', 'notice_body', 'issue_date'],
     sections: ['Tiêu đề và căn cứ ban hành', 'Nội dung thông báo', 'Hiệu lực áp dụng', 'Nơi nhận'],
+  },
+  {
+    id: 'official_letter',
+    name: 'Công văn',
+    category: 'Công văn',
+    icon: '📄',
+    description: 'Mẫu công văn chính thức gửi đến cơ quan, tổ chức khác.',
+    required_fields: ['sender_department', 'recipient_name', 'subject', 'content', 'issue_date', 'sender_name'],
+    sections: ['Thông tin người gửi', 'Thông tin người nhận', 'Tiêu đề công văn', 'Nội dung', 'Thông tin liên lạc', 'Chữ ký'],
+  },
+  {
+    id: 'decision_document',
+    name: 'Quyết định',
+    category: 'Quyết định',
+    icon: '⚖️',
+    description: 'Mẫu quyết định ban hành nội bộ công ty.',
+    required_fields: ['issuer_position', 'issuer_name', 'decision_title', 'decision_content', 'effective_date', 'announcement_date'],
+    sections: ['Căn cứ pháp lý', 'Nội dung quyết định', 'Trách nhiệm thực hiện', 'Hiệu lực áp dụng', 'Ký duyệt'],
+  },
+  {
+    id: 'appointment_decision',
+    name: 'Quyết định bổ nhiệm',
+    category: 'Quyết định',
+    icon: '📋',
+    description: 'Quyết định bổ nhiệm nhân viên vào chức vụ mới.',
+    required_fields: ['employee_name', 'old_position', 'new_position', 'appointment_date', 'issuer_name', 'company_name'],
+    sections: ['Thông tin nhân viên', 'Chức vụ mới', 'Hiệu lực bổ nhiệm', 'Quyền hạn và trách nhiệm', 'Ký duyệt'],
   },
 ];
 
@@ -77,9 +106,80 @@ const templateBuilders = {
     'Dai dien don vi ban hanh',
     '(Ky, ghi ro ho ten)',
   ].join('\n'),
+  official_letter: (vars) => [
+    'CONG VAN',
+    '',
+    `Trang/Ky hieu:                          Ha Noi, ngay ${vars.issue_date}`,
+    '',
+    'VE: ' + vars.subject.toUpperCase(),
+    '',
+    `Kinh gui: ${vars.recipient_name}`,
+    `Cua: ${vars.sender_department}`,
+    '',
+    'Noi dung:',
+    `${vars.content}`,
+    '',
+    'Chinh thuc,',
+    `${vars.sender_name}`,
+    `${vars.sender_department}`,
+  ].join('\n'),
+  decision_document: (vars) => [
+    'QUYET DINH',
+    `So: ..... /QD-${vars.issuer_position.substring(0, 2).toUpperCase()}`,
+    '',
+    `NHAN: ${vars.decision_title.toUpperCase()}`,
+    '',
+    'CAN CU:',
+    '- Luat doanh nghiep nam 2020',
+    '- Quy dinh cua cong ty',
+    '',
+    'QUYET DINH:',
+    `1. ${vars.decision_content}`,
+    `2. Hieu luc tru ngay: ${vars.effective_date}`,
+    `3. Ban hanh ngay: ${vars.announcement_date}`,
+    '',
+    'TRAC NHIEM THUC HIEN:',
+    '- Cac phong ban lien quan thi hanh quyet dinh nay.',
+    '- Ban chi dao tong hop va luu van ban cua cong ty.',
+    '',
+    'KY DUYET,',
+    `${vars.issuer_name}`,
+    `${vars.issuer_position}`,
+  ].join('\n'),
+  appointment_decision: (vars) => [
+    'QUYET DINH BO NHIEM',
+    `So: ..... /QD-HR`,
+    '',
+    `VE: BO NHIEM CHUC VU CHO ${vars.employee_name.toUpperCase()}`,
+    '',
+    'CAN CU:',
+    '- Luat doanh nghiep nam 2020',
+    '- Quy che to chuc va lam viec cua cong ty',
+    '',
+    'QUYET DINH:',
+    `1. Bo nhiem ${vars.employee_name} tu Vi tri: ${vars.old_position}`,
+    `   Len Vi tri: ${vars.new_position} effective ngay ${vars.appointment_date}`,
+    '2. Huu luong va phu cap theo tieu chuan chuc vu moi.',
+    '3. Muc do phuc tap cong viec tuong xung voi chuc vu moi.',
+    '',
+    'QUYEN HAN VA TRACH NHIEM:',
+    '- Chiu trach nhiem theo quy dinh cong ty va phap luat.',
+    '- Lap ke hoach va trien khai cong viec theo chi thi cua cap tren.',
+    '',
+    'KY DUYET,',
+    `${vars.issuer_name}`,
+    `${vars.company_name}`,
+  ].join('\n'),
 };
 
-export const listTemplates = async () => templateCatalog;
+export const listTemplates = async () => {
+  console.log(`[TEMPLATESERVICE.listTemplates()] Called`);
+  console.log(`[TEMPLATESERVICE.listTemplates()] templateCatalog has ${templateCatalog.length} items`);
+  templateCatalog.forEach((t, i) => {
+    console.log(`[TEMPLATESERVICE.listTemplates]   ${i}: ${t.id}`);
+  });
+  return templateCatalog;
+};
 
 export const validateTemplateInput = (template, variables = {}) => {
   const errors = [];

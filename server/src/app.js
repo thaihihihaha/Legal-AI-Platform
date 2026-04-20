@@ -35,7 +35,15 @@ await ensureMvpTables();
 const app = express();
 
 app.use(cors({ origin: getCorsOrigins() }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+// Middleware to log all requests
+app.use((req, res, next) => {
+  if (req.path.includes('/templates')) {
+    console.log(`[REQUEST LOG] ${req.method} ${req.path}`);
+  }
+  next();
+});
 
 // ── Serve uploaded files (local dev & production — chỉ đổi APP_BASE_URL trong .env)
 app.use('/uploads', express.static(UPLOAD_DIR));

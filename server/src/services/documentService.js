@@ -10,6 +10,8 @@ const DOCUMENT_SELECT = {
   workflow_status: true,
   analysis: true,
   notes: true,
+  source_contract_id: true,
+  uploaded_by: true,
   created_at: true,
   updated_at: true,
   analyzed_at: true,
@@ -20,6 +22,9 @@ const DOCUMENT_SELECT = {
     select: {
       tag: { select: { id: true, name: true, color: true } },
     },
+  },
+  source_contract: {
+    select: { id: true, name: true, contract_type: true, workflow_status: true },
   },
 };
 
@@ -153,15 +158,30 @@ export const updateDocumentAnalysis = async (companyId, documentId, analysisResu
 export const deleteDocument = async (companyId, documentId) => {
   const existing = await prisma.document.findFirst({
     where: { id: documentId, company_id: companyId, deleted_at: null },
-    select: { id: true, file_path: true },
+    select: { id: true, file_path: true, source_contract_id: true, uploaded_by: true },
   });
   if (!existing) throw new Error('Tài liệu không tồn tại.');
 
-  await prisma.document.update({
-    where: { id: documentId },
-    data: { deleted_at: new Date() },
-  });
-  return existing; // trả về để route xoá file vật lý
+  const now = new Date();
+  const ops = [
+    prisma.document.update({
+      where: { id: documentId },
+      data: { deleted_at: now },
+    }),
+  ];
+
+  // Nếu document liên kết với hợp đồng → cascade soft-delete hợp đồng
+  if (existing.source_contract_id) {
+    ops.push(
+      prisma.contract.updateMany({
+        where: { id: existing.source_contract_id, deleted_at: null },
+        data: { deleted_at: now },
+      })
+    );
+  }
+
+  await prisma.$transaction(ops);
+  return existing; // trả về để route quyết định xoá file vật lý
 };
 
 // ─── Get analysis results ──────────────────────────────────────────────────────

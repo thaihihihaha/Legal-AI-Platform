@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import { unlink } from 'fs/promises';
 import { existsSync, createReadStream } from 'fs';
 import { analyzeDocument } from '../agents/legal_agent.js';
+import { prisma } from '../lib/prisma.js';
 import {
   createDocumentFromUpload,
   getDocumentById,
@@ -254,19 +255,50 @@ router.patch('/:id', requireAction('edit:documents'), async (req, res) => {
 });
 
 // ─── DELETE /:id ──────────────────────────────────────────────────────────────
-router.delete('/:id', requireAction('delete:documents'), async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });
 
+    // Get document to check ownership and permissions
+    const document = await prisma.document.findFirst({
+      where: { id: req.params.id, company_id: companyId, deleted_at: null },
+      select: { id: true, uploaded_by: true, file_path: true, source_contract_id: true },
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: 'Tài liệu không tồn tại.' });
+    }
+
+    // Permission check: Allow if user is admin/owner OR if user is the document owner
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'owner' || req.user.is_super_admin;
+    const isDocumentOwner = document.uploaded_by === req.user.id;
+
+    if (!isAdmin && !isDocumentOwner) {
+      return res.status(403).json({
+        error: 'Insufficient permissions',
+        message: 'Only admin or document owner can delete this document',
+        required_role: 'admin',
+        user_role: req.user.role,
+      });
+    }
+
     const deleted = await deleteDocument(companyId, req.params.id);
 
-    // Xoá file vật lý nếu có
-    if (deleted?.file_path) {
+    // Nếu document liên kết hợp đồng → file vật lý thuộc về hợp đồng, không xóa ở đây
+    // (contract delete route sẽ xử lý khi cần thiết)
+    if (deleted?.file_path && !deleted.source_contract_id) {
       await unlink(getAbsolutePath(deleted.file_path)).catch(() => {});
     }
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      linked_contract_deleted: !!deleted.source_contract_id,
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

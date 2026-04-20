@@ -43,10 +43,12 @@ export const actionPermissions = {
   'upload:contracts': 'member',        // Upload contracts
   'create:tags': 'member',             // Create tags
   'create:categories': 'member',       // Create categories
+  'create:templates': 'member',        // Create custom templates
   'edit:documents': 'member',          // Edit own/company documents
   'edit:contracts': 'member',          // Edit own/company contracts
   'edit:tags': 'member',               // Edit tags
   'edit:categories': 'member',         // Edit categories
+  'edit:templates': 'member',          // Edit custom templates
   'parse:documents': 'member',         // Parse metadata
   'analyze:documents': 'member',       // Request AI analysis
 
@@ -60,6 +62,7 @@ export const actionPermissions = {
   'delete:contracts': 'admin',         // Delete contracts
   'delete:tags': 'admin',              // Delete tags
   'delete:categories': 'admin',        // Delete categories
+  'delete:templates': 'member',        // Delete custom templates
 
   // Settings (admin+ only)
   'manage:api_keys': 'admin',          // Create/edit/delete API keys

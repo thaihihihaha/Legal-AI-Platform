@@ -1,0 +1,75 @@
+--- server/src/routes/drafts.js
++++ server/src/routes/drafts.js
+@@ -167,4 +167,4 @@
+ router.patch('/:draftId', async (req, res) => {
+   try {
+     const { draftId } = req.params;
+-    const { content, changeSummary } = req.body;
++    const { content, title, changeSummary } = req.body;
+     const userId = req.user.id;
+ 
+-    if (!content) {
++    if (!content && !title) {
+       return res.status(400).json({
+         success: false,
+-        error: 'content bắt buộc',
++        error: 'content hoặc title bắt buộc',
+       });
+     }
+ 
+-    const updated = await saveDraft(draftId, userId, content, changeSummary);
++    const updated = await saveDraft(draftId, userId, content, title, changeSummary);
+ 
+     return res.json({
+--- server/src/services/draftService.js
++++ server/src/services/draftService.js
+@@ -308,3 +308,3 @@
+  */
+-export const saveDraft = async (draftId, userId, newContent, changeSummary = 'Manual edit') => {
++export const saveDraft = async (draftId, userId, newContent, newTitle, changeSummary = 'Manual edit') => {
+   try {
+@@ -323,7 +323,10 @@
+ 
++      const updateData = {
++        updated_at: new Date(),
++        updated_by: userId,
++      };
++      if (newTitle) updateData.title = newTitle;
++      if (newContent) {
++          updateData.content = newContent;
++          updateData.version = newVersion;
++      }
+       // Update draft
+       const updated = await prisma.draftGenerated.update({
+         where: { id: draftId },
+-        data: {
+-          content: newContent,
+-          version: newVersion,
+-          updated_at: new Date(),
+-          updated_by: userId,
+-        },
++        data: updateData,
+       });
+ 
+       // Create version record
+-      await prisma.draftVersion.create({
+-        data: {
+-          draft_id: draftId,
+-          version: newVersion,
+-          content: newContent,
+-          changed_by: userId,
+-          summary: changeSummary,
+-        },
+-      });
++      if (newContent) {
++          await prisma.draftVersion.create({
++            data: {
++              draft_id: draftId,
++              version: newVersion,
++              content: newContent,
++              changed_by: userId,
++              summary: changeSummary,
++            },
++          });
++      }
+ 

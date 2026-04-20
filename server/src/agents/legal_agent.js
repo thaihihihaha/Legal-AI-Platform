@@ -185,9 +185,19 @@ const buildReviewPrompt = (contractText) => {
       role: 'system',
       content: [
         'Bạn là chuyên gia rà soát hợp đồng cho doanh nghiệp Việt Nam.',
+        'Nhiệm vụ: phân tích rủi ro pháp lý chi tiết, chỉ ra từng rủi ro cụ thể trong hợp đồng.',
         'Chỉ xuất JSON hợp lệ, không bọc markdown, không giải thích thừa.',
         'Schema bắt buộc:',
-        '{"summary":"string","risk_score":0-100,"risks":["string"],"missing_clauses":["string"],"recommendations":["string"],"citations":[{"source":"string","article":"string","quote":"string"}],"confidence":0-1,"warnings":["string"]}',
+        '{',
+        '"summary":"string — tóm tắt tổng quan 2-3 câu",',
+        '"risk_score":0-100,',
+        '"risks":[{"clause":"tên điều khoản hoặc vị trí trong HĐ","issue":"mô tả rủi ro cụ thể","severity":"high|medium|low","legal_basis":"điều luật hoặc quy định liên quan nếu có"}],',
+        '"missing_clauses":[{"name":"tên điều khoản còn thiếu","reason":"vì sao cần thiết","legal_requirement":"căn cứ pháp lý bắt buộc nếu có"}],',
+        '"recommendations":[{"issue":"vấn đề cần xử lý","action":"hành động khuyến nghị cụ thể","priority":"high|medium|low"}],',
+        '"citations":[{"law_name":"tên đầy đủ văn bản pháp luật VD: Bộ luật Dân sự 2015","law_number":"số hiệu VD: 91/2015/QH13","article":"điều khoản VD: Điều 292","quote":"trích dẫn nội dung điều khoản","url":"link tra cứu nếu biết, nếu không để null"}],',
+        '"confidence":0-1,',
+        '"warnings":["string"]',
+        '}',
       ].join(' '),
     },
     {
@@ -195,6 +205,7 @@ const buildReviewPrompt = (contractText) => {
       content: JSON.stringify({
         task: 'review_contract',
         contract_text: contractText.substring(0, 15000),
+        instructions: 'Hãy phân tích chi tiết từng điều khoản có rủi ro. Với mỗi rủi ro, hãy nêu rõ: (1) điều khoản nào trong hợp đồng, (2) vấn đề cụ thể là gì, (3) căn cứ pháp lý Việt Nam nào liên quan. Với khuyến nghị, hãy đề xuất hành động cụ thể có thể thực hiện ngay.',
       }),
     },
   ];
@@ -231,13 +242,43 @@ const normalizeReviewResult = (rawContent, usage, model) => {
     ? parsed.summary.trim()
     : (rawContent || '').trim() || 'Không thể tạo tóm tắt rà soát hợp đồng.';
 
+  // Normalize risks: handle both string[] and object[] from AI
+  const normalizeRisks = (items = []) =>
+    (Array.isArray(items) ? items : []).map((item) =>
+      typeof item === 'string'
+        ? { clause: '', issue: item, severity: 'medium', legal_basis: '' }
+        : { clause: item.clause || '', issue: item.issue || item.text || '', severity: item.severity || 'medium', legal_basis: item.legal_basis || '' }
+    );
+
+  const normalizeMissing = (items = []) =>
+    (Array.isArray(items) ? items : []).map((item) =>
+      typeof item === 'string'
+        ? { name: item, reason: '', legal_requirement: '' }
+        : { name: item.name || item.text || '', reason: item.reason || '', legal_requirement: item.legal_requirement || '' }
+    );
+
+  const normalizeRecommendations = (items = []) =>
+    (Array.isArray(items) ? items : []).map((item) =>
+      typeof item === 'string'
+        ? { issue: item, action: '', priority: 'medium' }
+        : { issue: item.issue || item.text || '', action: item.action || '', priority: item.priority || 'medium' }
+    );
+
   return {
     summary,
     risk_score: typeof parsed?.risk_score === 'number' ? parsed.risk_score : 60,
-    risks: Array.isArray(parsed?.risks) ? parsed.risks : [],
-    missing_clauses: Array.isArray(parsed?.missing_clauses) ? parsed.missing_clauses : [],
-    recommendations: Array.isArray(parsed?.recommendations) ? parsed.recommendations : [],
-    citations: Array.isArray(parsed?.citations) ? parsed.citations : extractCitations(summary),
+    risks: normalizeRisks(parsed?.risks),
+    missing_clauses: normalizeMissing(parsed?.missing_clauses),
+    recommendations: normalizeRecommendations(parsed?.recommendations),
+    citations: Array.isArray(parsed?.citations)
+      ? parsed.citations.map((c) => ({
+          law_name: c.law_name || c.source || '',
+          law_number: c.law_number || '',
+          article: c.article || '',
+          quote: c.quote || '',
+          url: c.url || null,
+        }))
+      : extractCitations(summary).map((c) => ({ law_name: '', law_number: '', article: c.article, quote: c.quote, url: null })),
     confidence: typeof parsed?.confidence === 'number' ? parsed.confidence : 0.7,
     warnings: Array.isArray(parsed?.warnings) ? parsed.warnings : [],
     model,

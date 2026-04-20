@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(tasklist)",
+      "Bash(node -e 'const {PrismaClient} = require\\('\\\\''D:/Project/longpl/server/node_modules/@prisma/client'\\\\''\\); const p = new PrismaClient\\(\\); console.log\\('\\\\''template model:'\\\\'', typeof p.template\\); p.$disconnect\\(\\);')",
+      "Bash(node -e ' *)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /PID 39216 /F)",
+      "Bash(cmd /c \"taskkill /PID 39216 /F\")",
+      "Bash(cmd /c \"netstat -ano | findstr :8080\")",
+      "Bash(curl -s http://localhost:8080/v1/health)",
+      "Bash(curl -s -X POST http://localhost:8080/v1/templates -H \"Content-Type: application/json\" -d '{\"name\":\"test\"}')",
+      "Bash(npm start *)",
+      "Bash(cmd /c \"tasklist | findstr node\")",
+      "Bash(cmd /c \"netstat -ano | findstr LISTENING\")",
+      "Bash(cmd /c \"wmic process where name='node.exe' get processid,commandline 2>nul\")",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Select-Object Id,CPU,Path\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess\")",
+      "Bash(powershell -Command \"Get-Process -Id 39216 | Select-Object Id,MainWindowTitle,StartTime; \\(Get-WmiObject Win32_Process -Filter 'ProcessId=39216'\\).CommandLine\")",
+      "Bash(powershell -Command \"Stop-Process -Id 39216 -Force; Start-Sleep -Seconds 1; Get-Process node -ErrorAction SilentlyContinue | Select-Object Id\")",
+      "Bash(powershell -Command ' *)",
+      "Bash(curl -s -X DELETE http://localhost:8080/v1/templates/test-id)"
+    ]
+  }
+}

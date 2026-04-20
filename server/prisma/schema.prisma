@@ -49,6 +49,7 @@ model Company {
   tags          Tag[]
   audit_logs    AuditLog[]
   drafts        DraftGenerated[]
+  templates     Template[]
   clauses       Clause[] @relation("Clauses")
   integration_configs IntegrationConfig[] @relation("IntegrationConfigs")
   team_metrics  TeamMetric[]       @relation("TeamMetrics")
@@ -131,6 +132,7 @@ model User {
   legal_holds_lifted LegalHold[] @relation("LegalHoldsLifted")
   compliance_checks ComplianceCheck[] @relation("ComplianceChecks")
   template_versions TemplateVersion[] @relation("TemplateVersions")
+  templates_created Template[] @relation("TemplatesCreatedBy")
   export_history ExportHistory[] @relation("ExportHistory")
   approval_stages ApprovalStage[] @relation("ApprovalStages")
   delegated_approvals ApprovalStage[] @relation("DelegatedApprovals")
@@ -180,10 +182,11 @@ model Contract {
   updated_at       DateTime? @default(now()) @db.Timestamptz()
   deleted_at       DateTime? @db.Timestamptz()
 
-  company  Company      @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  uploader User?        @relation("ContractsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
-  category Category?    @relation(fields: [category_id], references: [id], onDelete: SetNull)
-  tags     ContractTag[]
+  company          Company      @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  uploader         User?        @relation("ContractsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
+  category         Category?    @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  tags             ContractTag[]
+  linked_document  Document?    @relation("DocumentFromContract")
 
   @@index([company_id, created_at(sort: Desc)])
   @@index([company_id, expiry_date])
@@ -253,33 +256,36 @@ model DocumentTag {
 }
 
 model Document {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  company_id       String    @db.Uuid
-  uploaded_by      String?   @db.Uuid
-  category_id      String?   @db.Uuid
-  name             String    @db.VarChar(500)
-  file_path        String                    // đường dẫn tương đối từ UPLOAD_DIR
-  file_size        Int?
-  mime_type        String?   @db.VarChar(100)
-  extracted_text   String?   @db.Text
-  content          String?   @db.Text              // full text extracted content
-  status           String?   @default("active") @db.VarChar(50)
-  workflow_status  String?   @default("draft") @db.VarChar(50) // draft|review|approved|archived
-  analysis         Json?                     // AI analysis results (document_type, main_topics, suggested_tags, summary, recommended_category)
-  metadata         Json?     @default("{}")  // additional metadata
-  notes            String?                   // ghi chú nội bộ
-  created_at       DateTime? @default(now()) @db.Timestamptz()
-  updated_at       DateTime? @default(now()) @db.Timestamptz()
-  analyzed_at      DateTime? @db.Timestamptz()
-  deleted_at       DateTime? @db.Timestamptz()
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id         String    @db.Uuid
+  uploaded_by        String?   @db.Uuid
+  category_id        String?   @db.Uuid
+  source_contract_id String?   @unique @db.Uuid  // liên kết nếu tài liệu được tạo từ upload hợp đồng
+  name               String    @db.VarChar(500)
+  file_path          String                    // đường dẫn tương đối từ UPLOAD_DIR
+  file_size          Int?
+  mime_type          String?   @db.VarChar(100)
+  extracted_text     String?   @db.Text
+  content            String?   @db.Text
+  status             String?   @default("active") @db.VarChar(50)
+  workflow_status    String?   @default("draft") @db.VarChar(50)
+  analysis           Json?
+  metadata           Json?     @default("{}")
+  notes              String?
+  created_at         DateTime? @default(now()) @db.Timestamptz()
+  updated_at         DateTime? @default(now()) @db.Timestamptz()
+  analyzed_at        DateTime? @db.Timestamptz()
+  deleted_at         DateTime? @db.Timestamptz()
 
-  company  Company      @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  uploader User?        @relation("DocumentsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
-  category Category?    @relation(fields: [category_id], references: [id], onDelete: SetNull)
-  tags     DocumentTag[]
+  company         Company    @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  uploader        User?      @relation("DocumentsUploadedBy", fields: [uploaded_by], references: [id], onDelete: SetNull)
+  category        Category?  @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  source_contract Contract?  @relation("DocumentFromContract", fields: [source_contract_id], references: [id], onDelete: SetNull)
+  tags            DocumentTag[]
 
   @@index([company_id, created_at(sort: Desc)])
   @@index([company_id, workflow_status])
+  @@index([source_contract_id])
   @@map("documents")
 }
 
@@ -1038,6 +1044,27 @@ model TeamMetric {
 // ============================================
 // PHASE 3.5: Template & Clause Library
 // ============================================
+
+model Template {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id  String    @db.Uuid
+  created_by  String    @db.Uuid
+  name        String    @db.VarChar(255)
+  category    String    @default("other") @db.VarChar(100)
+  description String?   @db.Text
+  content     String    @default("") @db.Text
+  variables   Json      @default("[]")
+  is_system   Boolean   @default(false)
+  status      String    @default("active") @db.VarChar(50)
+  created_at  DateTime  @default(now()) @db.Timestamptz()
+  updated_at  DateTime  @default(now()) @db.Timestamptz()
+
+  company     Company   @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  creator     User      @relation("TemplatesCreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@map("templates")
+}
 
 model TemplateVersion {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

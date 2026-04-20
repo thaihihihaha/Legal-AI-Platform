@@ -116,32 +116,57 @@ export const createContractFromUpload = async ({
 }) => {
   const contractType = inferContractType(originalName);
 
-  return prisma.contract.create({
-    data: {
-      company_id: companyId,
-      uploaded_by: userId,
-      category_id: categoryId || null,
-      name: originalName,
-      contract_type: contractType,
-      file_type: mimeType,
-      file_path: filePath || null,
-      file_size: fileSize || null,
-      extracted_text: extractedText,
-      content: extractedText,
-      status: 'active',
-      workflow_status: workflowStatus || 'draft',
-      notes: notes || null,
-      party_a_name: partyAName || null,
-      party_b_name: partyBName || null,
-      party_b_tax_code: partyBTaxCode || null,
-      effective_date: effectiveDate ? new Date(effectiveDate) : null,
-      expiry_date: expiryDate ? new Date(expiryDate) : null,
-      signed_date: signedDate ? new Date(signedDate) : null,
-      contract_value: contractValue || null,
-      currency: currency || 'VND',
-      metadata: { source: 'upload', size: fileSize },
-    },
-    select: { id: true, name: true, created_at: true },
+  // Dùng transaction: tạo contract + document liên kết cùng lúc
+  return prisma.$transaction(async (tx) => {
+    const contract = await tx.contract.create({
+      data: {
+        company_id: companyId,
+        uploaded_by: userId,
+        category_id: categoryId || null,
+        name: originalName,
+        contract_type: contractType,
+        file_type: mimeType,
+        file_path: filePath || null,
+        file_size: fileSize || null,
+        extracted_text: extractedText,
+        content: extractedText,
+        status: 'active',
+        workflow_status: workflowStatus || 'draft',
+        notes: notes || null,
+        party_a_name: partyAName || null,
+        party_b_name: partyBName || null,
+        party_b_tax_code: partyBTaxCode || null,
+        effective_date: effectiveDate ? new Date(effectiveDate) : null,
+        expiry_date: expiryDate ? new Date(expiryDate) : null,
+        signed_date: signedDate ? new Date(signedDate) : null,
+        contract_value: contractValue || null,
+        currency: currency || 'VND',
+        metadata: { source: 'upload', size: fileSize },
+      },
+      select: { id: true, name: true, created_at: true },
+    });
+
+    // Tạo Document record liên kết — cùng file_path, không copy file vật lý
+    await tx.document.create({
+      data: {
+        company_id: companyId,
+        uploaded_by: userId,
+        category_id: categoryId || null,
+        source_contract_id: contract.id,
+        name: originalName,
+        mime_type: mimeType,
+        file_path: filePath || null,
+        file_size: fileSize || null,
+        extracted_text: extractedText,
+        content: extractedText,
+        status: 'active',
+        workflow_status: workflowStatus || 'draft',
+        notes: notes || null,
+        metadata: { source: 'contract_upload', contract_id: contract.id },
+      },
+    });
+
+    return contract;
   });
 };
 
@@ -209,10 +234,20 @@ export const deleteContract = async (companyId, contractId) => {
   });
   if (!existing) throw new Error('Hợp đồng không tồn tại.');
 
-  await prisma.contract.update({
-    where: { id: contractId },
-    data: { deleted_at: new Date() },
-  });
+  const now = new Date();
+  await prisma.$transaction([
+    // Soft-delete hợp đồng
+    prisma.contract.update({
+      where: { id: contractId },
+      data: { deleted_at: now },
+    }),
+    // Cascade soft-delete document liên kết (nếu có)
+    prisma.document.updateMany({
+      where: { source_contract_id: contractId, deleted_at: null },
+      data: { deleted_at: now },
+    }),
+  ]);
+
   return existing; // trả về để route xoá file vật lý
 };
 
