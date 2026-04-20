@@ -63,6 +63,7 @@ class AuthService {
         `${API_BASE_URL}/auth/login`,
         { email, password },
         {
+          withCredentials: true, // Enable CORS credentials
           headers: {
             'Content-Type': 'application/json',
           },
@@ -94,6 +95,7 @@ class AuthService {
         `${API_BASE_URL}/auth/logout`,
         {},
         {
+          withCredentials: true,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -118,6 +120,7 @@ class AuthService {
       const response = await axios.get(
         `${API_BASE_URL}/auth/me`,
         {
+          withCredentials: true,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -147,6 +150,7 @@ class AuthService {
         `${API_BASE_URL}/auth/refresh`,
         {},
         {
+          withCredentials: true,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -181,6 +185,7 @@ class AuthService {
         `${API_BASE_URL}/auth/profile`,
         data,
         {
+          withCredentials: true,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -211,6 +216,7 @@ class AuthService {
         `${API_BASE_URL}/auth/change-password`,
         { old_password: oldPassword, new_password: newPassword },
         {
+          withCredentials: true,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -233,6 +239,7 @@ class AuthService {
         `${API_BASE_URL}/auth/request-reset`,
         { email },
         {
+          withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
           },
@@ -255,6 +262,7 @@ class AuthService {
         `${API_BASE_URL}/auth/reset-password`,
         { token: resetToken, new_password: newPassword },
         {
+          withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
           },
@@ -278,6 +286,7 @@ class AuthService {
         `${API_BASE_URL}/auth/verify-email`,
         { token: verificationToken },
         {
+          withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
           },

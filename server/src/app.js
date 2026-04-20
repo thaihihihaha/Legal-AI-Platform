@@ -105,7 +105,7 @@ app.get('/v1/health', async (req, res) => {
 // ──────────────────────────────────────────────────────────────────────────
 // Serve index.html for all non-API, non-static routes
 // This allows React Router to handle all client-side routing
-app.get('*', (req, res) => {
+app.get(/^(?!\/v1|\/uploads).*$/, (req, res) => {
   res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
     if (err) {
       res.status(500).json({ error: 'Failed to serve application' });
