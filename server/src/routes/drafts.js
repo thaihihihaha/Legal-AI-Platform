@@ -167,7 +167,7 @@ router.get('/:draftId', async (req, res) => {
 router.patch('/:draftId', async (req, res) => {
   try {
     const { draftId } = req.params;
-    const { content, changeSummary } = req.body;
+    const { content, title, changeSummary } = req.body;
     const userId = req.user.id;
 
     if (!content) {
@@ -177,7 +177,7 @@ router.patch('/:draftId', async (req, res) => {
       });
     }
 
-    const updated = await saveDraft(draftId, userId, content, changeSummary);
+    const updated = await saveDraft(draftId, userId, content, title, changeSummary);
 
     return res.json({
       success: true,

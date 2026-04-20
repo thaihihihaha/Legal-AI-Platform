@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Zap, Star, Copy, X, FileText, PlusCircle, Trash2, Settings2, Tag } from 'lucide-react';
+import { Search, Zap, Star, Copy, X, FileText, PlusCircle, Trash2, Settings2, Tag, Edit } from 'lucide-react';
 import PageHero from '../components/ui/PageHero';
 import { CopyPlus } from 'lucide-react';
 import DraftEditor from '../components/DraftEditor';
@@ -692,14 +692,28 @@ export default function TemplatesManagement() {
     setDraftError(null);
   };
 
-  const categories = [
-  { value: 'all', label: '📋 Tất cả' },
-  { value: 'official', label: '📄 Công văn' },
-  { value: 'decision', label: '📋 Quyết định' },
-  { value: 'notice', label: '📌 Thông báo' },
-  { value: 'service', label: '🤝 Hợp đồng dịch vụ' },
-  { value: 'employment', label: '👨‍💼 Hợp đồng lao động' },
-];
+  const handleDeleteDraft = async (id) => {
+    if (!confirm('Bạn có chắc muốn xóa văn bản này?')) return;
+    try {
+      const res = await fetchWithAuth(API_URL + '/v1/drafts/' + id, { method: 'DELETE' });
+      if (res.success) setDrafts(prev => prev.filter(d => d.id !== id));
+      else alert('Lỗi xóa: ' + (res.error || 'Unknown'));
+    } catch (err) { alert('Lỗi hệ thống: ' + err.message); }
+  };
+
+  const handleRenameDraft = async (id, currentTitle) => {
+    const newTitle = prompt('Nhập tên mới cho văn bản:', currentTitle);
+    if (!newTitle || newTitle === currentTitle) return;
+    try {
+      const res = await fetchWithAuth(API_URL + '/v1/drafts/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: newTitle })
+      });
+      if (res.success) {
+        setDrafts(prev => prev.map(d => d.id === id ? { ...d, title: newTitle } : d));
+      } else alert('Lỗi đổi tên: ' + (res.error || 'Unknown'));
+    } catch (err) { alert('Lỗi hệ thống: ' + err.message); }
+  };
 
   return (
     <div className="management-page">
@@ -712,13 +726,7 @@ export default function TemplatesManagement() {
 
       {/* Search & Filter Bar + Draft List Button */}
       <div className="management-toolbar templates-toolbar">
-        <button
-            type="button"
-            className="action-btn action-btn--primary"
-            onClick={() => setShowTemplateSelector(true)}
-          >
-            <PlusCircle size={16} /> Tạo văn bản mới
-          </button>
+        
 
         <div className="search-box">
           <Search size={16} />
@@ -730,17 +738,15 @@ export default function TemplatesManagement() {
           />
         </div>
 
-        <div className="category-filter">
-          {categories.map((cat) => (
-            <button
-              key={cat.value}
-              type="button"
-              className={`category-btn ${filterCategory === cat.value ? 'active' : ''}`}
-              onClick={() => setFilterCategory(cat.value)}
-            >
-              {cat.label}
-            </button>
-          ))}
+        <div className="create-cta-box" style={{ marginLeft: 'auto' }}>
+          <button
+            type="button"
+            className="action-btn action-btn--primary"
+            onClick={() => setShowTemplateSelector(true)}
+            style={{ padding: '0.75rem 1.5rem', background: 'var(--primary)', color: 'white', fontWeight: 'bold', fontSize: '1rem', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+          >
+            <PlusCircle size={20} /> TẠO VĂN BẢN MỚI
+          </button>
         </div>
       </div>
 
@@ -796,7 +802,25 @@ export default function TemplatesManagement() {
                         </div>
                       </div>
                       
-                      <div className="template-actions" style={{display:'flex', justifyContent:'flex-end'}}>
+                      <div className="template-actions" style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: '1rem'}}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleRenameDraft(draft.id, draftName); }}
+                              title="Đổi tên"
+                              style={{ color: '#475569', background: '#f1f5f9', padding: '6px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id); }}
+                              title="Xóa"
+                              style={{ color: '#ef4444', background: '#fef2f2', padding: '6px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         <button
                           type="button"
                           className="template-btn template-btn--primary-gradient"

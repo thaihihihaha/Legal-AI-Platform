@@ -107,26 +107,27 @@ export const createDraftFromTemplate = async (userId, companyId, templateId, var
 
     // Bước 2: Build prompt chuyên nghiệp cho AI
     const buildDraftSystemPrompt = (tmpl) => {
-      return `Bạn là chuyên gia soạn thảo hợp đồng và tài liệu pháp lý Việt Nam. 
-Tạo nội dung ${tmpl.name} chuyên nghiệp dựa trên thông tin được cung cấp.
-Đảm bảo tuân thủ luật pháp Việt Nam và các quy định liên quan.
-Trả lời bằng tiếng Việt, rõ ràng, chuyên nghiệp.`;
+      return `Bạn là chuyên gia soạn thảo hợp đồng và tài liệu pháp lý Việt Nam.
+Tạo nội dung ${tmpl.name} hoàn chỉnh, chuyên nghiệp, đúng pháp luật Việt Nam.
+Yêu cầu định dạng: Chỉ dùng HTML thuần (thẻ <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>, <strong>, <em>, <blockquote>).
+Tuyệt đối không dùng Markdown (không dùng **bold**, không dùng # heading, không dùng - list).
+Chỉ trả về nội dung HTML, không giải thích thêm.`;
     };
 
     const buildDraftUserPrompt = (tmpl, vars, evidence) => {
-      let prompt = `Hãy tạo một ${tmpl.name}\n\n`;
-      prompt += `Thông tin cơ bản:\n`;
+      let prompt = `Hãy soạn thảo ${tmpl.name} với các thông tin sau:\n\n`;
       Object.entries(vars).forEach(([key, value]) => {
         prompt += `- ${key}: ${value}\n`;
       });
-      
+
       if (evidence.length > 0) {
-        prompt += `\nTài liệu pháp lý liên quan:\n`;
+        prompt += `\nCăn cứ pháp lý tham khảo:\n`;
         evidence.slice(0, 3).forEach(e => {
           prompt += `- ${e.law_title || e.title}: ${e.excerpt || ''}\n`;
         });
       }
-      
+
+      prompt += `\nHãy sinh ra văn bản đầy đủ dưới dạng HTML. Không dùng Markdown.`;
       return prompt;
     };
 
@@ -305,7 +306,7 @@ export const getDraftDetail = async (draftId, userId) => {
 /**
  * Save/update draft content
  */
-export const saveDraft = async (draftId, userId, newContent, changeSummary = 'Manual edit') => {
+export const saveDraft = async (draftId, userId, newContent, newTitle, changeSummary = 'Manual edit') => {
   try {
     // Fetch current draft
     const draft = await prisma.draftGenerated.findUnique({
@@ -542,44 +543,112 @@ Hãy sinh ra văn bản hoàn chỉnh dưới dạng HTML.
 };
 
 /**
- * Convert plain text to HTML
+ * Convert AI output (HTML or markdown) to clean HTML for TipTap
  */
 const convertTextToHtml = (text) => {
   if (!text) return '<p></p>';
 
-  // Split paragraphs
-  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  const trimmed = text.trim();
 
-  const htmlParts = paragraphs.map(para => {
-    const trimmed = para.trim();
+  // If AI already returned HTML (contains block-level tags), use as-is
+  if (/<(p|h[1-6]|ul|ol|li|blockquote|div|table|strong|em)\b/i.test(trimmed)) {
+    return trimmed;
+  }
 
-    // Detect headings (lines that look like titles)
-    if (trimmed.length < 100 && !trimmed.includes(' ') || trimmed.match(/^(HOP DONG|THONG BAO|QUYET DINH)/i)) {
-      return `<h2 style="margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold;">${escapeHtml(trimmed)}</h2>`;
+  // Convert markdown to HTML
+  const lines = trimmed.split('\n');
+  const htmlLines = [];
+  let inList = false;
+  let listType = null;
+
+  const flushList = () => {
+    if (inList) {
+      htmlLines.push(`</${listType}>`);
+      inList = false;
+      listType = null;
     }
-
-    // Detect article sections (Điều ...)
-    if (trimmed.match(/^(Điều|DIEU)/i)) {
-      return `<p style="margin: 1em 0; font-weight: bold;">${escapeHtml(trimmed)}</p>`;
-    }
-
-    // Regular paragraph
-    return `<p style="margin: 0.8em 0; line-height: 1.6;">${escapeHtml(trimmed)}</p>`;
-  });
-
-  return htmlParts.join('\n');
-};
-
-/**
- * Escape HTML special characters
- */
-const escapeHtml = (text) => {
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
   };
-  return String(text).replace(/[&<>"']/g, char => map[char]);
+
+  const inlineMarkdown = (line) => {
+    return line
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/__(.+?)__/g, '<strong>$1</strong>')
+      .replace(/_(.+?)_/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code>$1</code>');
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    // Headings
+    const h1 = line.match(/^#\s+(.+)/);
+    const h2 = line.match(/^##\s+(.+)/);
+    const h3 = line.match(/^###\s+(.+)/);
+    if (h1) { flushList(); htmlLines.push(`<h1>${inlineMarkdown(h1[1])}</h1>`); continue; }
+    if (h2) { flushList(); htmlLines.push(`<h2>${inlineMarkdown(h2[1])}</h2>`); continue; }
+    if (h3) { flushList(); htmlLines.push(`<h3>${inlineMarkdown(h3[1])}</h3>`); continue; }
+
+    // Horizontal rule
+    if (/^(---|\*\*\*|___)$/.test(line.trim())) {
+      flushList();
+      htmlLines.push('<hr/>');
+      continue;
+    }
+
+    // Unordered list
+    const ulMatch = line.match(/^[\*\-]\s+(.+)/);
+    if (ulMatch) {
+      if (!inList || listType !== 'ul') {
+        flushList();
+        htmlLines.push('<ul>');
+        inList = true;
+        listType = 'ul';
+      }
+      htmlLines.push(`<li>${inlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    // Ordered list
+    const olMatch = line.match(/^\d+\.\s+(.+)/);
+    if (olMatch) {
+      if (!inList || listType !== 'ol') {
+        flushList();
+        htmlLines.push('<ol>');
+        inList = true;
+        listType = 'ol';
+      }
+      htmlLines.push(`<li>${inlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+
+    // Blockquote
+    const bqMatch = line.match(/^>\s+(.+)/);
+    if (bqMatch) {
+      flushList();
+      htmlLines.push(`<blockquote><p>${inlineMarkdown(bqMatch[1])}</p></blockquote>`);
+      continue;
+    }
+
+    // Empty line
+    if (!line.trim()) {
+      flushList();
+      continue;
+    }
+
+    // Vietnamese article sections (Điều ...)
+    if (/^(Điều\s+\d|ĐIỀU\s+\d)/i.test(line.trim())) {
+      flushList();
+      htmlLines.push(`<p><strong>${inlineMarkdown(line.trim())}</strong></p>`);
+      continue;
+    }
+
+    // Regular paragraph line
+    flushList();
+    htmlLines.push(`<p>${inlineMarkdown(line.trim())}</p>`);
+  }
+
+  flushList();
+  return htmlLines.join('\n') || '<p></p>';
 };
