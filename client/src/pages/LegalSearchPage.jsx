@@ -382,9 +382,26 @@ export default function LegalSearchPage() {
               </div>
               <h2>Xin chào!</h2>
               <p>
-                Tôi là Trợ lý Pháp lý AI. Hãy đặt câu hỏi về pháp luật Việt Nam —
-                tôi sẽ trả lời kèm trích dẫn nguồn chính xác.
+                Tôi là Trợ lý Pháp lý AI. Hãy đặt câu hỏi về pháp luật Việt Nam — tôi sẽ trả lời kèm trích dẫn nguồn chính xác.
               </p>
+
+              {/* 3-Layer Verification Info */}
+              <div className="ls-verification-info">
+                <h3>✅ Cơ chế Xác minh 3 Lớp</h3>
+                <ul>
+                  <li><strong>Lớp 1:</strong> Kiểm tra với CSDL luật VN cập nhật</li>
+                  <li><strong>Lớp 2:</strong> So sánh với các quy định liên quan</li>
+                  <li><strong>Lớp 3:</strong> Xác thực trích dẫn từ nguồn chính thức</li>
+                </ul>
+              </div>
+
+              {/* Warning Banner */}
+              <div className="ls-warning-banner">
+                <AlertTriangle size={18} />
+                <div>
+                  <strong>⚠️ Lưu ý quan trọng:</strong> Câu trả lời được xác thực qua 3 lớp kiểm tra. Tuy nhiên, để có tư vấn chính thức, vui lòng tham khảo ý kiến của các chuyên gia pháp lý.
+                </div>
+              </div>
             </div>
           ) : (
             messages.map((msg, i) =>

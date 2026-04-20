@@ -738,8 +738,8 @@ export default function ContractsManagement({ onReviewClick, reviewBusy }) {
       />
 
       <div className="cm-layout">
-        {/* ── Left sidebar ── */}
-        <aside className="cm-sidebar">
+        {/* ── Left sidebar (HIDDEN) ── */}
+        <aside className="cm-sidebar" style={{ display: 'none' }}>
           <CategoryTree
             resourceType="contract"
             selectedId={selectedCategoryId}
