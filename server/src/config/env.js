@@ -25,15 +25,26 @@ export const validateEnv = () => {
 };
 
 export const getCorsOrigins = () => {
-  const raw = process.env.CORS_ORIGIN;
-  if (!raw) {
-    return '*';
+  const origins = [];
+
+  // Add CORS_ORIGINS from env
+  if (process.env.CORS_ORIGINS) {
+    const corsOrigins = process.env.CORS_ORIGINS
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    origins.push(...corsOrigins);
   }
 
-  const origins = raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  // Add FRONTEND_URL if configured
+  if (process.env.FRONTEND_URL && !origins.includes(process.env.FRONTEND_URL)) {
+    origins.push(process.env.FRONTEND_URL);
+  }
 
-  return origins.length > 0 ? origins : '*';
+  // Default to localhost for development
+  if (origins.length === 0) {
+    origins.push('http://localhost:3000', 'http://localhost:5173');
+  }
+
+  return origins;
 };

@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import contractRoutes from './routes/contracts.js';
 import documentRoutes from './routes/documents.js';
@@ -34,7 +36,12 @@ await ensureMvpTables();
 
 const app = express();
 
-app.use(cors({ origin: getCorsOrigins() }));
+app.use(cors({ 
+  origin: getCorsOrigins(),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 // Middleware to log all requests
@@ -47,6 +54,18 @@ app.use((req, res, next) => {
 
 // ── Serve uploaded files (local dev & production — chỉ đổi APP_BASE_URL trong .env)
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+// ──────────────────────────────────────────────────────────────────────────
+// SERVE FRONTEND STATIC FILES (PRODUCTION BUILD)
+// ──────────────────────────────────────────────────────────────────────────
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendDistPath = path.join(__dirname, '../../client/dist');
+
+// Serve index.html and static files from frontend build
+app.use(express.static(frontendDistPath, {
+  maxAge: '1d',
+  etag: false
+}));
 
 // Load API Routes
 app.use('/v1/auth', authRoutes);
@@ -78,6 +97,19 @@ app.get('/v1/health', async (req, res) => {
       ai,
       pinecone,
     },
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SPA FALLBACK ROUTE (CRITICAL FOR CLIENT ROUTING)
+// ──────────────────────────────────────────────────────────────────────────
+// Serve index.html for all non-API, non-static routes
+// This allows React Router to handle all client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Failed to serve application' });
+    }
   });
 });
 
