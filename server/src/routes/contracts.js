@@ -14,7 +14,9 @@ import {
 import { setContractTags } from '../services/tagService.js';
 import { resolveCompanyId } from '../services/tenantService.js';
 import { createDiskUpload, toRelativePath, getFileUrl } from '../config/storage.js';
-import { requireAction } from '../middleware/rolePermissions.js';
+import { requireAction, checkOwnershipOrAdmin } from '../middleware/rolePermissions.js';
+import { requireAuth } from '../middleware/auth.js';
+import { prisma } from '../lib/prisma.js';
 
 const require = createRequire(import.meta.url);
 const pdfParseModule = require('pdf-parse');
@@ -257,10 +259,27 @@ router.patch('/:id', requireAction('edit:contracts'), async (req, res) => {
 });
 
 // ─── DELETE /:id ──────────────────────────────────────────────────────────────
-router.delete('/:id', requireAction('delete:contracts'), async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req.user);
     if (!companyId) return res.status(400).json({ error: 'Không tìm thấy company_id.' });
+    
+    // Get contract to check ownership
+    const contract = await prisma.contract.findFirst({
+      where: { id: req.params.id, company_id: companyId, deleted_at: null },
+      select: { id: true, file_path: true, uploaded_by: true },
+    });
+    
+    if (!contract) {
+      return res.status(404).json({ error: 'Hợp đồng không tồn tại.' });
+    }
+    
+    // Check if user is owner or admin
+    const hasPermission = await checkOwnershipOrAdmin(req, contract.uploaded_by);
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Bạn không có quyền xóa hợp đồng này.' });
+    }
+    
     const deleted = await deleteContract(companyId, req.params.id);
     // Xoá file vật lý nếu có
     if (deleted?.file_path) {
