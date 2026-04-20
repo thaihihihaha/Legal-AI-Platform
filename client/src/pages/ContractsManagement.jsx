@@ -3,6 +3,7 @@ import {
   Search, Download, Trash2, Eye, Scale, UploadCloud,
   FolderOpen, X, ChevronDown, ChevronUp, AlertTriangle,
   Clock, FileText, DollarSign, Users, Tag, SlidersHorizontal,
+  ShieldAlert, ShieldCheck, ShieldQuestion, BookOpen, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import PageHero from '../components/ui/PageHero';
 import CategoryTree from '../components/shared/CategoryTree';
@@ -479,12 +480,277 @@ function EditModal({ contract, onClose, onSaved }) {
   );
 }
 
+// ─── Review Detail Modal ──────────────────────────────────────────────────────
+const SEVERITY_CONFIG = {
+  high:   { label: 'Cao',    cls: 'sev-high',   icon: <ShieldAlert size={14} /> },
+  medium: { label: 'Trung bình', cls: 'sev-medium', icon: <ShieldQuestion size={14} /> },
+  low:    { label: 'Thấp',   cls: 'sev-low',    icon: <ShieldCheck size={14} /> },
+};
+const PRIORITY_CONFIG = {
+  high:   { label: 'Ưu tiên cao',    cls: 'sev-high' },
+  medium: { label: 'Ưu tiên vừa',   cls: 'sev-medium' },
+  low:    { label: 'Ưu tiên thấp',  cls: 'sev-low' },
+};
+
+// Normalize review data: handle both old string[] and new object[] formats from DB
+const normalizeRisksClient = (items = []) =>
+  (Array.isArray(items) ? items : []).map((item) =>
+    typeof item === 'string'
+      ? { clause: '', issue: item, severity: 'medium', legal_basis: '' }
+      : { clause: item.clause || '', issue: item.issue || item.text || String(item), severity: item.severity || 'medium', legal_basis: item.legal_basis || '' }
+  ).filter((item) => item.issue);
+
+const normalizeMissingClient = (items = []) =>
+  (Array.isArray(items) ? items : []).map((item) =>
+    typeof item === 'string'
+      ? { name: item, reason: '', legal_requirement: '' }
+      : { name: item.name || item.text || String(item), reason: item.reason || '', legal_requirement: item.legal_requirement || '' }
+  ).filter((item) => item.name);
+
+const normalizeRecsClient = (items = []) =>
+  (Array.isArray(items) ? items : []).map((item) =>
+    typeof item === 'string'
+      ? { issue: item, action: '', priority: 'medium' }
+      : { issue: item.issue || item.text || String(item), action: item.action || '', priority: item.priority || 'medium' }
+  ).filter((item) => item.issue);
+
+function ReviewDetailModal({ contract, onClose }) {
+  const r = contract.review_result;
+  if (!r) return null;
+
+  const riskColor = r.risk_score >= 70 ? '#dc2626' : r.risk_score >= 40 ? '#ea580c' : '#16a34a';
+  const riskLabel = r.risk_score >= 70 ? 'Rủi ro cao' : r.risk_score >= 40 ? 'Rủi ro trung bình' : 'Rủi ro thấp';
+
+  const risks = normalizeRisksClient(r.risks);
+  const missing = normalizeMissingClient(r.missing_clauses);
+  const recs = normalizeRecsClient(r.recommendations);
+  const citations = r.citations || [];
+
+  return (
+    <div className="cm-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cm-modal cm-modal--review">
+        <div className="cm-modal-header">
+          <div>
+            <h3>Kết quả AI Review chi tiết</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748b' }}>{contract.name}</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        <div className="cm-review-body">
+          {/* Risk score hero */}
+          <div className="cm-review-score-hero">
+            <div className="cm-review-score-ring" style={{ '--risk-color': riskColor }}>
+              <span className="cm-review-score-num" style={{ color: riskColor }}>{r.risk_score}%</span>
+              <span className="cm-review-score-label">Rủi ro</span>
+            </div>
+            <div className="cm-review-score-meta">
+              <div className="cm-review-score-badge" style={{ background: riskColor }}>{riskLabel}</div>
+              {r.confidence != null && (
+                <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '6px 0 0' }}>
+                  Độ tin cậy AI: {Math.round(r.confidence * 100)}%
+                </p>
+              )}
+              {r.reviewedAt && (
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '4px 0 0' }}>
+                  {new Date(r.reviewedAt).toLocaleString('vi-VN')}
+                </p>
+              )}
+            </div>
+            <div className="cm-review-summary">
+              <p>{r.summary}</p>
+            </div>
+          </div>
+
+          {/* Risks */}
+          {risks.length > 0 && (
+            <div className="cm-review-section">
+              <h4 className="cm-review-section-title">
+                <ShieldAlert size={16} style={{ color: '#dc2626' }} />
+                Rủi ro phát hiện ({risks.length})
+              </h4>
+              <div className="cm-review-items">
+                {risks.map((risk, i) => {
+                  const sev = SEVERITY_CONFIG[risk.severity] || SEVERITY_CONFIG.medium;
+                  return (
+                    <div key={i} className={`cm-review-risk-card cm-review-risk-card--${risk.severity || 'medium'}`}>
+                      <div className="cm-review-risk-header">
+                        <span className={`cm-sev-badge ${sev.cls}`}>{sev.icon} {sev.label}</span>
+                        {risk.clause && (
+                          <span className="cm-review-clause-tag">📄 {risk.clause}</span>
+                        )}
+                      </div>
+                      <p className="cm-review-risk-issue">{risk.issue}</p>
+                      {risk.legal_basis && (
+                        <p className="cm-review-legal-basis">
+                          <BookOpen size={12} /> <em>{risk.legal_basis}</em>
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Missing clauses */}
+          {missing.length > 0 && (
+            <div className="cm-review-section">
+              <h4 className="cm-review-section-title">
+                <AlertTriangle size={16} style={{ color: '#ea580c' }} />
+                Điều khoản còn thiếu ({missing.length})
+              </h4>
+              <div className="cm-review-items">
+                {missing.map((item, i) => (
+                  <div key={i} className="cm-review-missing-card">
+                    <p className="cm-review-missing-name"><strong>{item.name}</strong></p>
+                    {item.reason && <p className="cm-review-missing-reason">{item.reason}</p>}
+                    {item.legal_requirement && (
+                      <p className="cm-review-legal-basis">
+                        <BookOpen size={12} /> <em>{item.legal_requirement}</em>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {recs.length > 0 && (
+            <div className="cm-review-section">
+              <h4 className="cm-review-section-title">
+                <Lightbulb size={16} style={{ color: '#0891b2' }} />
+                Khuyến nghị xử lý ({recs.length})
+              </h4>
+              <div className="cm-review-items">
+                {recs.map((rec, i) => {
+                  const pri = PRIORITY_CONFIG[rec.priority] || PRIORITY_CONFIG.medium;
+                  return (
+                    <div key={i} className="cm-review-rec-card">
+                      <div className="cm-review-risk-header">
+                        <span className={`cm-sev-badge ${pri.cls}`}>{pri.label}</span>
+                      </div>
+                      {rec.issue && <p style={{ margin: '6px 0 4px', fontWeight: 500, fontSize: '0.85rem' }}>{rec.issue}</p>}
+                      {rec.action && (
+                        <p className="cm-review-rec-action">
+                          <CheckCircle2 size={12} style={{ color: '#16a34a', flexShrink: 0 }} />
+                          {rec.action}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Citations */}
+          {citations.length > 0 && (
+            <div className="cm-review-section">
+              <h4 className="cm-review-section-title">
+                <BookOpen size={16} style={{ color: '#6366f1' }} />
+                Căn cứ pháp lý tham chiếu ({citations.length})
+              </h4>
+              <div className="cm-review-items">
+                {citations.map((c, i) => {
+                  // Normalize old format (source/article/quote) vs new format (law_name/law_number/...)
+                  const lawName = c.law_name || c.source || '';
+                  const lawNumber = c.law_number || '';
+                  const article = c.article || '';
+                  const quote = c.quote || '';
+                  const url = c.url && c.url !== 'null' ? c.url : null;
+
+                  return (
+                    <div key={i} className="cm-review-citation-card">
+                      <div className="cm-review-citation-header">
+                        {article && (
+                          <span className="cm-citation-article">{article}</span>
+                        )}
+                        {lawName && (
+                          <span className="cm-citation-law-name">{lawName}</span>
+                        )}
+                        {lawNumber && (
+                          <span className="cm-citation-law-number">Số: {lawNumber}</span>
+                        )}
+                      </div>
+                      {quote && (
+                        <p className="cm-citation-quote">"{quote}"</p>
+                      )}
+                      {url && (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="cm-citation-link"
+                        >
+                          🔗 Xem văn bản gốc
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="cm-citation-disclaimer">
+                * Các điều khoản do AI trích xuất từ nội dung hợp đồng và kiến thức pháp luật.
+                Vui lòng đối chiếu với văn bản pháp luật chính thức trước khi sử dụng.
+              </p>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {r.warnings?.length > 0 && (
+            <div className="cm-review-section">
+              <h4 className="cm-review-section-title" style={{ color: '#ea580c' }}>
+                <AlertTriangle size={16} /> Lưu ý
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.82rem', color: '#64748b' }}>
+                {r.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="cm-modal-footer">
+          <button type="button" className="action-btn action-btn--tertiary" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Detail Drawer ────────────────────────────────────────────────────────────
-function DetailDrawer({ contract, onClose, onEdit, onReview, reviewBusy }) {
+function DetailDrawer({ contract, onClose, onEdit, onReviewed }) {
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [showReviewDetail, setShowReviewDetail] = useState(false);
+
   if (!contract) return null;
   const risk = getRiskBadge(contract);
   const wf = WORKFLOW_LABELS[contract.workflow_status] || { label: contract.workflow_status, cls: 'wf-draft' };
   const expiryStatus = getExpiryStatus(contract.expiry_date);
+
+  const handleReview = async () => {
+    setReviewing(true);
+    setReviewError('');
+    try {
+      const res = await fetchWithAuth(`${API_URL}/v1/contracts/${contract.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onReviewed?.(contract.id, data.result);
+      } else {
+        setReviewError(data.error || 'AI không thể phân tích lúc này.');
+      }
+    } catch {
+      setReviewError('Lỗi kết nối server.');
+    } finally {
+      setReviewing(false);
+    }
+  };
 
   return (
     <div className="cm-drawer">
@@ -561,12 +827,55 @@ function DetailDrawer({ contract, onClose, onEdit, onReview, reviewBusy }) {
 
         {contract.review_result && (
           <div className="cm-detail-section">
-            <h4>Kết quả AI Review</h4>
-            <p className="cm-detail-notes" style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>
-              {typeof contract.review_result.summary === 'string'
-                ? contract.review_result.summary
-                : JSON.stringify(contract.review_result, null, 2)}
-            </p>
+            <h4>
+              <Scale size={14} /> Kết quả AI Review
+              {contract.review_result.reviewedAt && (
+                <span style={{ fontWeight: 400, fontSize: '0.75rem', color: '#64748b', marginLeft: 8 }}>
+                  {new Date(contract.review_result.reviewedAt).toLocaleString('vi-VN')}
+                </span>
+              )}
+            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+              {contract.review_result.risk_score != null && (
+                <span className={`risk-badge ${getRiskBadge(contract).cls}`} style={{ fontSize: '0.85rem' }}>
+                  Rủi ro: {contract.review_result.risk_score}%
+                </span>
+              )}
+              {contract.review_result.risks?.length > 0 && (
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  {contract.review_result.risks.length} vấn đề ·{' '}
+                  {contract.review_result.recommendations?.length || 0} khuyến nghị
+                </span>
+              )}
+            </div>
+            {contract.review_result.summary && (
+              <p className="cm-detail-notes" style={{ fontSize: '0.8rem' }}>
+                {contract.review_result.summary.length > 120
+                  ? contract.review_result.summary.slice(0, 120) + '...'
+                  : contract.review_result.summary}
+              </p>
+            )}
+            <button
+              type="button"
+              className="action-btn action-btn--tertiary"
+              style={{ marginTop: '0.5rem', width: '100%' }}
+              onClick={() => setShowReviewDetail(true)}
+            >
+              <Eye size={14} /> Xem chi tiết kết quả review
+            </button>
+          </div>
+        )}
+
+        {showReviewDetail && (
+          <ReviewDetailModal
+            contract={contract}
+            onClose={() => setShowReviewDetail(false)}
+          />
+        )}
+
+        {reviewError && (
+          <div className="cm-detail-section" style={{ borderColor: '#fca5a5' }}>
+            <p style={{ color: '#dc2626', fontSize: '0.8rem', margin: 0 }}>⚠ {reviewError}</p>
           </div>
         )}
       </div>
@@ -585,12 +894,14 @@ function DetailDrawer({ contract, onClose, onEdit, onReview, reviewBusy }) {
         )}
         <button
           type="button"
-          className="action-btn action-btn--secondary"
-          onClick={() => onReview(contract)}
-          disabled={reviewBusy}
+          className="action-btn action-btn--primary"
+          onClick={handleReview}
+          disabled={reviewing}
+          style={{ marginLeft: 'auto' }}
+          title="Dùng AI để phân tích rủi ro hợp đồng"
         >
           <Scale size={15} />
-          {reviewBusy ? 'Đang review...' : 'AI Review'}
+          {reviewing ? 'Đang phân tích...' : contract.review_result ? 'Review lại' : 'AI Review'}
         </button>
       </div>
     </div>
@@ -598,7 +909,7 @@ function DetailDrawer({ contract, onClose, onEdit, onReview, reviewBusy }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function ContractsManagement({ onReviewClick, reviewBusy }) {
+export default function ContractsManagement() {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allTags, setAllTags] = useState([]);
@@ -780,9 +1091,6 @@ export default function ContractsManagement({ onReviewClick, reviewBusy }) {
             <button type="button" className="action-btn action-btn--primary" onClick={() => setShowUpload(true)}>
               <UploadCloud size={16} /> Upload hợp đồng
             </button>
-            <button type="button" className="action-btn action-btn--secondary" disabled={reviewBusy}>
-              <Scale size={16} /> {reviewBusy ? 'Đang review...' : 'AI Review được chọn'}
-            </button>
             {selectedIds.size > 0 && (
               <button type="button" className="action-btn action-btn--danger" onClick={handleBulkDelete}>
                 <Trash2 size={16} /> Xóa ({selectedIds.size})
@@ -886,7 +1194,9 @@ export default function ContractsManagement({ onReviewClick, reviewBusy }) {
                             <button
                               type="button"
                               className="cm-contract-name-btn"
-                              onClick={() => setDetailContract(detailContract?.id === c.id ? null : c)}
+                              onClick={() => {
+                                setDetailContract(detailContract?.id === c.id ? null : c);
+                              }}
                             >
                               <FileText size={14} className="cm-file-icon" />
                               <span className="contract-name">{c.name}</span>
@@ -928,7 +1238,14 @@ export default function ContractsManagement({ onReviewClick, reviewBusy }) {
                           )}
                           <td><span className={`risk-badge ${risk.cls}`}>{risk.text}</span></td>
                           <td className="col-actions">
-                            <button type="button" className="icon-btn" title="Xem chi tiết" onClick={() => setDetailContract(detailContract?.id === c.id ? null : c)}>
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              title="Xem chi tiết"
+                              onClick={() => {
+                                setDetailContract(detailContract?.id === c.id ? null : c);
+                              }}
+                            >
                               <Eye size={15} />
                             </button>
                             <button type="button" className="icon-btn" title="Chỉnh sửa" onClick={() => setEditingContract(c)}>
@@ -954,8 +1271,12 @@ export default function ContractsManagement({ onReviewClick, reviewBusy }) {
             contract={detailContract}
             onClose={() => setDetailContract(null)}
             onEdit={(c) => { setEditingContract(c); setDetailContract(null); }}
-            onReview={(c) => onReviewClick?.(c)}
-            reviewBusy={reviewBusy}
+            onReviewed={(id, result) => {
+              setContracts((prev) =>
+                prev.map((c) => c.id === id ? { ...c, review_result: result } : c)
+              );
+              setDetailContract((prev) => prev ? { ...prev, review_result: result } : prev);
+            }}
           />
         )}
       </div>

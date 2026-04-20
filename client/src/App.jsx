@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import {
   Scale,
   Settings,
@@ -11,7 +12,6 @@ import {
   CopyPlus,
   FolderOpen,
 } from 'lucide-react';
-import ChatPanel from './components/ChatPanel';
 import Modal from './components/Modal';
 import ExplorerSidebar from './components/workspace/ExplorerSidebar';
 import EditorTabs from './components/workspace/EditorTabs';
@@ -26,64 +26,18 @@ import LegalSearchPage from './pages/LegalSearchPage';
 import AdminPanel from './pages/AdminPanel';
 import { fetchWithAuth, logout } from './utils/fetchWithAuth.js';
 import { TokenStorage, validateStoredTokens } from './utils/tokenUtils.js';
+import { setUser as setReduxUser, clearAuth } from './store/slices/authSlice.js';
 import './app.css';
 import './styles/management-pages.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
-const authHeaders = (token) => ({
-  Authorization: `Bearer ${token}`,
-});
-
-const formatDisplayValue = (value) => {
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value && typeof value === 'object') {
-    const summary = value.summary || value.answer || '';
-    const risks = Array.isArray(value.risks) ? value.risks : [];
-    const recommendations = Array.isArray(value.recommendations) ? value.recommendations : [];
-    const riskScore = typeof value.risk_score === 'number' ? `Điểm rủi ro: ${value.risk_score}/100` : '';
-
-    return [
-      summary,
-      riskScore,
-      risks.length > 0 ? `Rủi ro: ${risks.join(' | ')}` : '',
-      recommendations.length > 0 ? `Khuyến nghị: ${recommendations.join(' | ')}` : '',
-    ].filter(Boolean).join('\n\n');
-  }
-
-  return 'Không có dữ liệu hiển thị.';
-};
-
-const renderContractReviewBadge = (contract) => {
-  if (!contract?.review_result) {
-    return 'Chưa review';
-  }
-
-  const riskScore = contract.review_result.risk_score;
-  if (typeof riskScore === 'number') {
-    return `Rủi ro ${riskScore}/100`;
-  }
-
-  return 'Đã review';
-};
-
-const getContractTone = (contract) => {
-  const score = contract?.review_result?.risk_score;
-  if (typeof score !== 'number') return 'neutral';
-  if (score >= 70) return 'danger';
-  if (score >= 40) return 'warning';
-  return 'safe';
-};
 
 function AuthScreen({ mode, setMode, form, setForm, onSubmit, pending }) {
   return (
     <div className="auth-shell">
       <div className="auth-card">
         <h1>{mode === 'login' ? 'Đăng nhập hệ thống' : 'Tạo tài khoản mới'}</h1>
-        <p>Kết nối vào Legal AI workspace để dùng contracts và chatbot.</p>
+        <p>Kết nối vào Legal workspace để quản lý hợp đồng và tra cứu pháp lý.</p>
 
         <form
           onSubmit={(e) => {
@@ -139,23 +93,13 @@ function AuthScreen({ mode, setMode, form, setForm, onSubmit, pending }) {
 function ShellDashboard({
   stats,
   onUploadClick,
-  onReviewClick,
   onOpenTemplates,
   onOpenLegalSearch,
   onOpenIntegration,
   onOpenRiskOverview,
   uploadBusy,
-  reviewBusy,
   contracts,
 }) {
-  const reviewedCount = contracts.filter((item) => item.review_result).length;
-  const completionRate = stats.contracts > 0 ? Math.round((reviewedCount / stats.contracts) * 100) : 0;
-  const highRiskCount = contracts.filter((item) => {
-    const score = item.review_result?.risk_score;
-    return typeof score === 'number' && score >= 70;
-  }).length;
-  const pendingCount = Math.max(stats.contracts - reviewedCount, 0);
-
   const dashboardActions = [
     {
       key: 'upload',
@@ -165,15 +109,6 @@ function ShellDashboard({
       title: uploadBusy ? 'Đang tải lên...' : 'Upload hợp đồng',
       description: 'Nạp hợp đồng mới vào legal vault để hệ thống trích xuất và index tự động.',
       onClick: onUploadClick,
-    },
-    {
-      key: 'review',
-      className: 'action-card action-card--tall',
-      iconClass: 'action-icon action-icon-review',
-      icon: <Scale />,
-      title: reviewBusy ? 'AI đang rà soát...' : 'Rà soát hợp đồng',
-      description: 'Kích hoạt AI Legal Agent để phân tích rủi ro và đưa khuyến nghị xử lý.',
-      onClick: onReviewClick,
     },
     {
       key: 'templates',
@@ -213,22 +148,14 @@ function ShellDashboard({
     },
   ];
 
-  const getContractTone = (contract) => {
-    const score = contract.review_result?.risk_score;
-    if (typeof score !== 'number') return 'neutral';
-    if (score >= 70) return 'danger';
-    if (score >= 40) return 'warning';
-    return 'safe';
-  };
-
   return (
     <div className="dashboard-content dashboard-phase3">
       <PageHero
         kicker="DASHBOARD LEGAL OPS"
         icon={<Scale size={32} />}
-        title={<>Trợ lý Pháp lý AI <span className="badge">AGENT</span></>}
-        subtitle="Trợ lý pháp lý AI cho doanh nghiệp Việt Nam"
-        pills={['Đa tên miền', 'Trí tuệ Hợp đồng', 'Sẵn sàng Tuân thủ']}
+        title="Dashboard Pháp Lý"
+        subtitle="Quản lý hợp đồng và tra cứu pháp lý cho doanh nghiệp Việt Nam"
+        pills={['Đa tên miền', 'Quản lý Hợp đồng', 'Sẵn sàng Tuân thủ']}
       />
 
       <div className="stats-row">
@@ -241,38 +168,37 @@ function ShellDashboard({
         <section className="intel-panel intel-main">
           <div className="intel-headline">
             <h3>Nhịp điệu Vận hành</h3>
-            <span>Tổng quan Real-time</span>
+            <span>Tổng quan</span>
           </div>
 
           <div className="intel-metrics">
             <div className="metric-row">
               <div className="metric-label">
-                <span>Tỉ lệ review hoàn tất</span>
-                <strong>{completionRate}%</strong>
+                <span>Tổng hợp đồng</span>
+                <strong>{stats.contracts}</strong>
               </div>
-              <div className="metric-track"><div className="metric-fill fill-blue" style={{ width: `${completionRate}%` }} /></div>
+              <div className="metric-track"><div className="metric-fill fill-blue" style={{ width: `${Math.min(100, stats.contracts * 5)}%` }} /></div>
             </div>
 
             <div className="metric-row">
               <div className="metric-label">
-                <span>Hợp đồng rủi ro cao</span>
-                <strong>{highRiskCount}</strong>
+                <span>Tài liệu</span>
+                <strong>{stats.documents}</strong>
               </div>
-              <div className="metric-track"><div className="metric-fill fill-red" style={{ width: `${Math.min(100, highRiskCount * 18)}%` }} /></div>
+              <div className="metric-track"><div className="metric-fill fill-gold" style={{ width: `${Math.min(100, stats.documents * 5)}%` }} /></div>
             </div>
 
             <div className="metric-row">
               <div className="metric-label">
-                <span>Hợp đồng chờ xử lý</span>
-                <strong>{pendingCount}</strong>
+                <span>Mẫu văn bản</span>
+                <strong>{stats.templates}</strong>
               </div>
-              <div className="metric-track"><div className="metric-fill fill-gold" style={{ width: `${Math.min(100, pendingCount * 18)}%` }} /></div>
+              <div className="metric-track"><div className="metric-fill fill-red" style={{ width: `${Math.min(100, stats.templates * 5)}%` }} /></div>
             </div>
           </div>
 
           <div className="command-row">
             <button type="button" className="command-chip" onClick={onUploadClick}>{uploadBusy ? 'Đang upload...' : 'Nạp hợp đồng mới'}</button>
-            <button type="button" className="command-chip" onClick={onReviewClick}>{reviewBusy ? 'Đang rà soát...' : 'Kích hoạt AI Review'}</button>
             <button type="button" className="command-chip" onClick={onOpenRiskOverview}>Mở Tổng Quan Rủi Ro</button>
             <button type="button" className="command-chip" onClick={onOpenIntegration}>Xem Sử Dụng API</button>
           </div>
@@ -297,8 +223,8 @@ function ShellDashboard({
                     <h4>{contract.name}</h4>
                     <p>{contract.contract_type || 'loại khác'} • {contract.status || 'có hiệu lực'}</p>
                   </div>
-                  <span className={`status-badge ${getContractTone(contract)}`}>
-                    {renderContractReviewBadge(contract)}
+                  <span className="status-badge neutral">
+                    {contract.workflow_status || contract.status || 'Đang xử lý'}
                   </span>
                 </div>
               ))
@@ -317,88 +243,6 @@ function ShellDashboard({
             </div>
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function ContractsPage({ contracts, onUploadClick, onReviewClick, uploadBusy, reviewBusy }) {
-  const reviewedCount = contracts.filter((item) => item.review_result).length;
-  const pendingCount = Math.max(contracts.length - reviewedCount, 0);
-
-  return (
-    <div className="dashboard-content contracts-phase3">
-      <PageHero
-        icon={<FolderOpen size={32} />}
-        title="Kho Hợp Đồng"
-        subtitle="Danh sách hợp đồng đã upload, trạng thái review và hành động xử lý tiếp theo."
-        pills={[`${contracts.length} hợp đồng`, `${reviewedCount} đã duyệt`, `${pendingCount} chờ xử lý`]}
-      />
-
-      <div className="contracts-summary-strip">
-        <div className="contracts-summary-chip">Kho Pháp Lý</div>
-        <div className="contracts-summary-chip">Theo dõi Rủi ro</div>
-        <div className="contracts-summary-chip">Sẵn sàng AI Review</div>
-      </div>
-
-      <div className="action-grid contracts-actions">
-        <button type="button" className="action-card action-card-btn" onClick={onUploadClick}>
-          <div className="action-icon action-icon-upload"><UploadCloud /></div>
-          <div className="action-text">
-            <h3>{uploadBusy ? 'Đang tải lên...' : 'Upload hợp đồng mới'}</h3>
-            <p>Gửi file PDF/DOCX/TXT/MD để hệ thống trích xuất và lưu DB.</p>
-          </div>
-        </button>
-        <button type="button" className="action-card action-card-btn" onClick={onReviewClick}>
-          <div className="action-icon action-icon-review"><Scale /></div>
-          <div className="action-text">
-            <h3>{reviewBusy ? 'AI đang rà soát...' : 'Rà soát hợp đồng gần nhất'}</h3>
-            <p>Chạy review AI trên bản hợp đồng gần nhất đã upload.</p>
-          </div>
-        </button>
-      </div>
-
-      <div className="contracts-list-stage">
-        {contracts.length === 0 ? (
-          <div className="stat-card contracts-empty">
-            <h3>Chưa có hợp đồng</h3>
-            <p>Hãy upload file để tạo dữ liệu cho tab này.</p>
-          </div>
-        ) : (
-          contracts.map((contract) => (
-            <div key={contract.id} className="contracts-row-card">
-              <div className="contracts-row-main">
-                <div>
-                  <h3>{contract.name}</h3>
-                  <p>
-                    {contract.contract_type || 'loại khác'} • {contract.status || 'có hiệu lực'}
-                  </p>
-                </div>
-                <div className="contracts-row-side">
-                  <div className={`status-badge ${getContractTone(contract)}`}>
-                    {renderContractReviewBadge(contract)}
-                  </div>
-                  <div className="contracts-row-date">
-                    {contract.created_at ? new Date(contract.created_at).toLocaleString('vi-VN') : ''}
-                  </div>
-                  <button
-                    type="button"
-                    className="auth-submit contract-review-btn"
-                    disabled={reviewBusy}
-                    onClick={() => onReviewClick(contract)}
-                  >
-                    Review hợp đồng này
-                  </button>
-                </div>
-              </div>
-              {contract.review_result && (
-                <div className="contracts-row-review">
-                  {formatDisplayValue(contract.review_result)}
-                </div>
-              )}
-            </div>
-          ))
-        )}
       </div>
     </div>
   );
@@ -821,7 +665,7 @@ function SettingsPage() {
       <div className="stat-card" style={{ textAlign: 'left' }}>
         <h3 style={{ marginTop: 0 }}>Trạng thái</h3>
         <p style={{ textTransform: 'none', letterSpacing: 0 }}>
-          Phase 5 hiện tập trung vào route shell, auth flow và wiring UI. Các cài đặt nâng cao sẽ được nối sau.
+          Các cài đặt nâng cao sẽ được nối sau.
         </p>
       </div>
     </div>
@@ -838,9 +682,7 @@ function WorkspaceLayout({
   openModal,
   onLogout,
   onUploadClick,
-  onReviewClick,
   uploadBusy,
-  reviewBusy,
   stats,
   fileInputRef,
   handleFileSelected,
@@ -854,24 +696,17 @@ function WorkspaceLayout({
     <ShellDashboard
       stats={stats}
       onUploadClick={onUploadClick}
-      onReviewClick={onReviewClick}
       onOpenTemplates={() => navigate('/templates')}
       onOpenLegalSearch={() => navigate('/legal-search')}
       onOpenIntegration={() => navigate('/integrations')}
       onOpenRiskOverview={() => navigate('/risk-overview')}
       uploadBusy={uploadBusy}
-      reviewBusy={reviewBusy}
       contracts={contracts}
     />
   );
 
   if (pageKey.startsWith('/contracts-management')) {
-    content = (
-      <ContractsManagement
-        onReviewClick={onReviewClick}
-        reviewBusy={reviewBusy}
-      />
-    );
+    content = <ContractsManagement />;
   } else if (pageKey.startsWith('/documents-management')) {
     content = <DocumentsManagement />;
   } else if (pageKey.startsWith('/templates-management')) {
@@ -917,8 +752,6 @@ function WorkspaceLayout({
             style={{ display: 'none' }}
           />
         </main>
-
-        {!pageKey.startsWith('/legal-search') && <ChatPanel />}
       </div>
 
       <StatusBar pathName={location.pathname} user={user} />
@@ -936,16 +769,22 @@ function WorkspaceLayout({
 function WorkspaceController() {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const [expanded, setExpanded] = useState({ hopdong: true, tailieu: true, mau: true, management: true, recent: false, starred: false });
   const [token, setToken] = useState(localStorage.getItem('longpl_token') || '');
   const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      dispatch(setReduxUser(user));
+    }
+  }, [user, dispatch]);
+
   const [contracts, setContracts] = useState([]);
+  const [templateCount, setTemplateCount] = useState(0);
   const [authMode, setAuthMode] = useState('login');
   const [authPending, setAuthPending] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [reviewBusy, setReviewBusy] = useState(false);
-  const [latestExtractedText, setLatestExtractedText] = useState('');
-  const [latestContractId, setLatestContractId] = useState('');
   const [authForm, setAuthForm] = useState({
     fullName: '',
     email: '',
@@ -956,8 +795,8 @@ function WorkspaceController() {
 
   const stats = {
     contracts: contracts.length,
-    documents: latestExtractedText ? 1 : 0,
-    templates: 8,
+    documents: 0,
+    templates: templateCount,
   };
 
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -970,7 +809,6 @@ function WorkspaceController() {
     setModal({ open: false, title: '', message: '' });
   }, []);
 
-  // Token expiry event listener
   useEffect(() => {
     const handleTokenExpired = (event) => {
       const message = event.detail?.message || 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
@@ -984,17 +822,14 @@ function WorkspaceController() {
     return () => window.removeEventListener('token-expired', handleTokenExpired);
   }, [openModal]);
 
-  // Validate tokens on app startup
   useEffect(() => {
     validateStoredTokens()
       .then((isValid) => {
         if (isValid) {
-          // Token is valid, restore from storage
           const currentToken = TokenStorage.getAccessToken();
           setToken(currentToken);
           setUser(TokenStorage.getUser());
         } else {
-          // Tokens invalid or expired, clear
           setToken('');
           setUser(null);
         }
@@ -1015,12 +850,6 @@ function WorkspaceController() {
     const payload = await response.json();
     const items = Array.isArray(payload.contracts) ? payload.contracts : [];
     setContracts(items);
-
-    if (items.length > 0) {
-      setLatestContractId(String(items[0].id));
-    } else {
-      setLatestContractId('');
-    }
   };
 
   useEffect(() => {
@@ -1034,6 +863,12 @@ function WorkspaceController() {
       setContracts([]);
       navigate('/login', { replace: true });
     });
+
+    // Fetch template count for dashboard
+    fetchWithAuth(`${API_URL}/v1/templates/count`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.count != null) setTemplateCount(d.count); })
+      .catch(() => {});
   }, [token, navigate, openModal]);
 
   useEffect(() => {
@@ -1083,7 +918,6 @@ function WorkspaceController() {
         throw new Error(loginData.error || 'Đăng nhập thất bại.');
       }
 
-      // Store both access and refresh tokens
       TokenStorage.setTokens(loginData.token, loginData.refresh_token);
       TokenStorage.setUser(loginData.user || null);
       setToken(loginData.token);
@@ -1099,11 +933,10 @@ function WorkspaceController() {
 
   const handleLogout = () => {
     TokenStorage.clearTokens();
+    dispatch(clearAuth());
     setToken('');
     setUser(null);
     setContracts([]);
-    setLatestExtractedText('');
-    setLatestContractId('');
     navigate('/login', { replace: true });
   };
 
@@ -1134,11 +967,6 @@ function WorkspaceController() {
         throw new Error(data.error || 'Upload hợp đồng thất bại.');
       }
 
-      const previewText = data.textPreview || '';
-      setLatestExtractedText(previewText.replace(/\.\.\.$/, ''));
-      if (data.contractId) {
-        setLatestContractId(String(data.contractId));
-      }
       openModal('Upload thành công', `Đã xử lý file: ${data.fileName}`);
       await fetchContracts();
       navigate('/contracts');
@@ -1147,47 +975,6 @@ function WorkspaceController() {
     } finally {
       setUploadBusy(false);
       event.target.value = '';
-    }
-  };
-
-  const handleReviewClick = async (contractCandidate = null) => {
-    if (!token) {
-      openModal('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để rà soát hợp đồng.');
-      return;
-    }
-
-    const selectedContract = contractCandidate || contracts.find((item) => String(item.id) === String(latestContractId)) || contracts[0] || null;
-    const selectedContractId = selectedContract?.id || latestContractId;
-
-    if (!selectedContractId) {
-      openModal('Thiếu hợp đồng', 'Không tìm thấy mã hợp đồng để gửi AI rà soát.');
-      return;
-    }
-
-    // Gửi contractText nếu có sẵn client-side (tối ưu); nếu không server tự fetch từ DB
-    const selectedText = (selectedContract?.extracted_text || selectedContract?.content || latestExtractedText || '').trim();
-
-    setReviewBusy(true);
-    try {
-      const response = await fetchWithAuth(`${API_URL}/v1/contracts/${selectedContractId}/review`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ contractText: selectedText || undefined }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Rà soát hợp đồng thất bại.');
-      }
-
-      openModal('Kết quả rà soát', formatDisplayValue(data.result || 'AI đã hoàn tất phân tích hợp đồng.'));
-      await fetchContracts();
-    } catch (error) {
-      openModal('Review thất bại', error.message || 'Không thể chạy AI review cho hợp đồng.');
-    } finally {
-      setReviewBusy(false);
     }
   };
 
@@ -1227,9 +1014,7 @@ function WorkspaceController() {
       openModal={openModal}
       onLogout={handleLogout}
       onUploadClick={handleUploadClick}
-      onReviewClick={handleReviewClick}
       uploadBusy={uploadBusy}
-      reviewBusy={reviewBusy}
       stats={stats}
       fileInputRef={fileInputRef}
       handleFileSelected={handleFileSelected}

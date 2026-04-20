@@ -1,0 +1,170 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Source Tier Badge Styling
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Inline Badge */
+.stb-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.stb-inline:hover {
+  opacity: 0.8;
+}
+
+.stb-inline-xs {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+
+.stb-inline-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.stb-inline-md {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+/* Block Badge */
+.stb-block {
+  border-left: 4px solid;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.stb-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.stb-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stb-icon {
+  font-size: 1.1rem;
+}
+
+.stb-label {
+  font-weight: 600;
+}
+
+.stb-description {
+  margin: 6px 0;
+  color: var(--text-secondary, #64748b);
+  font-size: 0.8rem;
+}
+
+.stb-link {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.5);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.stb-link:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* Tooltip Badge */
+.stb-tooltip-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.stb-tooltip-trigger {
+  font-size: 1.2rem;
+  cursor: help;
+  transition: opacity 0.2s;
+}
+
+.stb-tooltip-trigger:hover {
+  opacity: 0.8;
+}
+
+.stb-tooltip-trigger.tier-1 {
+  filter: saturate(1.2);
+}
+
+.stb-tooltip-trigger.tier-2 {
+  filter: saturate(1.1);
+}
+
+.stb-tooltip-trigger.tier-3 {
+  filter: saturate(1);
+}
+
+.stb-tooltip-content {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: white;
+  border: 2px solid;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+
+.stb-tooltip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.stb-tooltip-desc {
+  color: var(--text-secondary, #64748b);
+  font-size: 0.75rem;
+  margin-bottom: 6px;
+}
+
+.stb-tooltip-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.stb-tooltip-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}

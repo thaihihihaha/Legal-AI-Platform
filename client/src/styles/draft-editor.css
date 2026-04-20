@@ -54,6 +54,19 @@
   border-color: rgba(255, 255, 255, 0.5);
 }
 
+.btn-close-header {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  padding: 0.5rem;
+  min-width: 36px;
+  justify-content: center;
+}
+
+.btn-close-header:hover {
+  background: rgba(239, 68, 68, 0.5);
+  border-color: rgba(239, 68, 68, 0.8);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* Editor Main Content */
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -183,6 +196,28 @@
 
 .editor-content li {
   margin-bottom: 0.5rem;
+}
+
+.editor-content h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 2rem 0 1rem 0;
+  color: #0f172a;
+}
+
+.editor-content blockquote {
+  border-left: 4px solid #3b82f6;
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  background: #f1f5f9;
+  color: #475569;
+  font-style: italic;
+}
+
+.editor-content hr {
+  border: none;
+  border-top: 2px solid #e2e8f0;
+  margin: 1.5rem 0;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */

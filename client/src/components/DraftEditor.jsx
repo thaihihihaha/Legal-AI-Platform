@@ -1,16 +1,19 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import CharacterCount from '@tiptap/extension-character-count';
-import { useState, useEffect } from 'react';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import { useState } from 'react';
 import { Save, X, Download, AlertCircle } from 'lucide-react';
 import '../styles/draft-editor.css';
 
-export default function DraftEditor({ 
-  draft, 
-  onSave, 
-  onCancel, 
+export default function DraftEditor({
+  draft,
+  onSave,
+  onCancel,
   onExport,
-  validationResult = {} 
+  onSaveAsTemplate,
+  validationResult = {}
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [changeSummary, setChangeSummary] = useState('');
@@ -20,31 +23,27 @@ export default function DraftEditor({
     extensions: [
       StarterKit.configure({
         paragraph: {
-          HTMLAttributes: {
-            class: 'draft-paragraph',
-          },
+          HTMLAttributes: { class: 'draft-paragraph' },
         },
       }),
-      CharacterCount.configure({
-        limit: 50000,
+      Underline,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
       }),
+      CharacterCount.configure({ limit: 50000 }),
     ],
     content: draft?.content || '',
-    onUpdate: ({ editor }) => {
+    onUpdate: () => {
       setHasChanges(true);
     },
   });
 
   const handleSave = async () => {
     if (!editor) return;
-    
     setIsSaving(true);
     try {
       const content = editor.getHTML();
-      await onSave({
-        content,
-        changeSummary: changeSummary || 'Manual edit',
-      });
+      await onSave({ content, changeSummary: changeSummary || 'Manual edit' });
       setHasChanges(false);
       setChangeSummary('');
     } finally {
@@ -73,7 +72,7 @@ export default function DraftEditor({
       <div className="draft-editor-header">
         <h2 className="draft-title">{draft?.title || 'Mẫu văn bản'}</h2>
         <div className="draft-header-actions">
-          <button 
+          <button
             className="btn-icon"
             onClick={() => onExport?.('docx')}
             title="Xuất DOCX"
@@ -81,13 +80,20 @@ export default function DraftEditor({
             <Download size={18} />
             DOCX
           </button>
-          <button 
+          <button
             className="btn-icon"
             onClick={() => onExport?.('pdf')}
             title="Xuất PDF"
           >
             <Download size={18} />
             PDF
+          </button>
+          <button
+            className="btn-icon btn-close-header"
+            onClick={handleCancel}
+            title="Đóng"
+          >
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -96,6 +102,32 @@ export default function DraftEditor({
         {/* Editor Panel */}
         <div className="editor-panel">
           <div className="editor-toolbar">
+            {/* Headings */}
+            <div className="toolbar-group">
+              <button
+                onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+                className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''}
+                title="Tiêu đề 1"
+              >
+                H1
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''}
+                title="Tiêu đề 2"
+              >
+                H2
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+                className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''}
+                title="Tiêu đề 3"
+              >
+                H3
+              </button>
+            </div>
+
+            {/* Text formatting */}
             <div className="toolbar-group">
               <button
                 onClick={() => editor?.chain().focus().toggleBold().run()}
@@ -114,32 +146,55 @@ export default function DraftEditor({
                 <em>I</em>
               </button>
               <button
+                onClick={() => editor?.chain().focus().toggleUnderline().run()}
+                className={editor?.isActive('underline') ? 'active' : ''}
+                title="Gạch chân (Ctrl+U)"
+              >
+                <span style={{ textDecoration: 'underline' }}>U</span>
+              </button>
+              <button
                 onClick={() => editor?.chain().focus().toggleStrike().run()}
                 disabled={!editor?.can().chain().focus().toggleStrike().run()}
                 className={editor?.isActive('strike') ? 'active' : ''}
-                title="Gạch ngang (Ctrl+Shift+X)"
+                title="Gạch ngang"
               >
                 <s>S</s>
               </button>
             </div>
 
+            {/* Alignment */}
             <div className="toolbar-group">
               <button
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''}
-                title="Tiêu đề 2"
+                onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+                className={editor?.isActive({ textAlign: 'left' }) ? 'active' : ''}
+                title="Căn trái"
               >
-                H2
+                ≡
               </button>
               <button
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''}
-                title="Tiêu đề 3"
+                onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+                className={editor?.isActive({ textAlign: 'center' }) ? 'active' : ''}
+                title="Căn giữa"
               >
-                H3
+                ☰
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+                className={editor?.isActive({ textAlign: 'right' }) ? 'active' : ''}
+                title="Căn phải"
+              >
+                ≣
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().setTextAlign('justify').run()}
+                className={editor?.isActive({ textAlign: 'justify' }) ? 'active' : ''}
+                title="Căn đều"
+              >
+                ▤
               </button>
             </div>
 
+            {/* Lists and blocks */}
             <div className="toolbar-group">
               <button
                 onClick={() => editor?.chain().focus().toggleBulletList().run()}
@@ -155,9 +210,29 @@ export default function DraftEditor({
               >
                 1.
               </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                className={editor?.isActive('blockquote') ? 'active' : ''}
+                title="Trích dẫn"
+              >
+                "
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+                title="Đường kẻ ngang"
+              >
+                —
+              </button>
             </div>
 
+            {/* Clear + Undo/Redo */}
             <div className="toolbar-group">
+              <button
+                onClick={() => editor?.chain().focus().unsetAllMarks().run()}
+                title="Xóa định dạng"
+              >
+                T̶
+              </button>
               <button
                 onClick={() => editor?.chain().focus().undo().run()}
                 disabled={!editor?.can().chain().focus().undo().run()}
@@ -175,35 +250,56 @@ export default function DraftEditor({
             </div>
           </div>
 
-          <EditorContent 
-            editor={editor} 
-            className="editor-content"
-          />
+          <EditorContent editor={editor} className="editor-content" />
 
           <div className="editor-footer">
-            <span className="char-count">
-              {charCount} ký tự / {wordCount} từ
-            </span>
-            <div className="editor-actions">
-              <button 
-                className="btn-secondary"
-                onClick={handleCancel}
-              >
-                <X size={16} />
-                Hủy
-              </button>
-              <button 
-                className="btn-primary"
-                onClick={handleSave}
-                disabled={isSaving || !hasChanges}
-              >
-                <Save size={16} />
-                {isSaving ? 'Đang lưu...' : 'Lưu'}
-              </button>
+              <span className="char-count">
+                {charCount} ký tự / {wordCount} từ
+              </span>
+              <div className="editor-actions">
+                <button className="btn-secondary" onClick={handleCancel}>
+                  <X size={16} />
+                  Hủy
+                </button>
+                {onSaveAsTemplate && (
+                  <button 
+                    className="btn-warning"
+                    onClick={() => {
+                      const content = editor.getHTML();
+                      onSaveAsTemplate({ content, draftName: draft.title });
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      backgroundColor: '#10b981',
+                      color: 'white'
+                    }}
+                    title="Lưu văn bản này thành một Mẫu tuỳ chỉnh (Custom Template) để dùng cho lần sau"
+                  >
+                    <Save size={16} />
+                    Lưu thành Mẫu
+                  </button>
+                )}
+                <button
+                  className="btn-primary"
+                  onClick={handleSave}
+                  disabled={isSaving || !hasChanges}
+                >
+                  <Save size={16} />
+                  {isSaving ? 'Đang lưu...' : 'Lưu'}
+                </button>
+              </div>
             </div>
-          </div>
 
-          {changeSummary !== null && hasChanges && (
+            {changeSummary !== null && hasChanges && (
             <div className="change-summary">
               <input
                 type="text"
@@ -230,9 +326,7 @@ export default function DraftEditor({
               </h4>
               <ul className="error-list">
                 {errors.map((error, idx) => (
-                  <li key={idx} className="error-item">
-                    {error}
-                  </li>
+                  <li key={idx} className="error-item">{error}</li>
                 ))}
               </ul>
             </div>
@@ -245,9 +339,7 @@ export default function DraftEditor({
               </h4>
               <ul className="warning-list">
                 {warnings.map((warning, idx) => (
-                  <li key={idx} className="warning-item">
-                    {warning}
-                  </li>
+                  <li key={idx} className="warning-item">{warning}</li>
                 ))}
               </ul>
             </div>
@@ -260,9 +352,7 @@ export default function DraftEditor({
               </h4>
               <ul className="suggestion-list">
                 {suggestions.map((suggestion, idx) => (
-                  <li key={idx} className="suggestion-item">
-                    {suggestion}
-                  </li>
+                  <li key={idx} className="suggestion-item">{suggestion}</li>
                 ))}
               </ul>
             </div>

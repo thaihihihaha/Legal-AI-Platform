@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Trash2, Eye, Grid3x3, List, ChevronUp, ChevronDown, X, FileText, UploadCloud } from 'lucide-react';
+import { Search, Download, Trash2, Eye, Grid3x3, List, ChevronUp, ChevronDown, X, FileText, UploadCloud, Scale } from 'lucide-react';
 import PageHero from '../components/ui/PageHero';
 import '../components/modal.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+const CONTRACT_TYPE_LABELS = {
+  hop_dong_lao_dong: 'Lao động',
+  hop_dong_dich_vu: 'Dịch vụ',
+  hop_dong_thuong_mai: 'Thương mại',
+  hop_dong_mua_ban: 'Mua bán',
+  hop_dong_thue: 'Thuê',
+  hop_dong_bao_hiem: 'Bảo hiểm',
+  hop_dong_bao_mat: 'Bảo mật (NDA)',
+  other: 'Hợp đồng',
+};
 
 export default function DocumentsManagement() {
   const [documents, setDocuments] = useState([]);
@@ -20,7 +31,6 @@ export default function DocumentsManagement() {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadNotes, setUploadNotes] = useState('');
 
-  // Fetch documents
   useEffect(() => {
     fetchDocuments();
   }, []);
@@ -36,8 +46,6 @@ export default function DocumentsManagement() {
         const data = await response.json();
         setDocuments(data.documents || []);
         setLoadedOnce(true);
-      } else {
-        console.error('Failed to fetch documents:', response.status);
       }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
@@ -46,7 +54,6 @@ export default function DocumentsManagement() {
     }
   };
 
-  // Upload document
   const handleUpload = async () => {
     if (!uploadFile) {
       setUploadError('Vui lòng chọn một file');
@@ -57,7 +64,7 @@ export default function DocumentsManagement() {
       setUploading(true);
       setUploadError('');
       const token = localStorage.getItem('longpl_token');
-      
+
       const formData = new FormData();
       formData.append('file', uploadFile);
       formData.append('notes', uploadNotes);
@@ -80,15 +87,26 @@ export default function DocumentsManagement() {
       }
     } catch (error) {
       setUploadError('Lỗi khi upload: ' + error.message);
-      console.error('Upload error:', error);
     } finally {
       setUploading(false);
     }
   };
 
-  // Delete documents
   const handleDelete = async (docIds) => {
-    if (!confirm('Bạn chắc chắn muốn xóa?')) return;
+    // Kiểm tra nếu có document liên kết hợp đồng
+    const linkedDocs = docIds
+      .map((id) => documents.find((d) => d.id === id))
+      .filter((d) => d?.source_contract_id);
+
+    let confirmMsg = `Bạn chắc chắn muốn xóa ${docIds.length} tài liệu?`;
+    if (linkedDocs.length > 0) {
+      confirmMsg =
+        `⚠️ Trong số này có ${linkedDocs.length} tài liệu là HỢP ĐỒNG:\n` +
+        linkedDocs.map((d) => `• ${d.name}`).join('\n') +
+        `\n\nXóa tài liệu này sẽ XÓA LUÔN hợp đồng liên kết trong Quản lý Hợp đồng.\n\nBạn có chắc chắn muốn tiếp tục?`;
+    }
+
+    if (!confirm(confirmMsg)) return;
 
     try {
       const token = localStorage.getItem('longpl_token');
@@ -99,10 +117,7 @@ export default function DocumentsManagement() {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (response.ok) {
-          deleted++;
-        }
+        if (response.ok) deleted++;
       }
 
       if (deleted > 0) {
@@ -127,7 +142,6 @@ export default function DocumentsManagement() {
   };
 
   const handleView = async (doc) => {
-    // Mở tab ngay lập tức (trong user gesture) trước khi fetch — tránh bị popup blocker chặn
     const newTab = window.open('', '_blank');
     if (!newTab) {
       alert('Trình duyệt đang chặn popup. Vui lòng cho phép popup từ trang này và thử lại.');
@@ -162,43 +176,37 @@ export default function DocumentsManagement() {
   const filteredDocuments = documents
     .filter((doc) => {
       const matchesSearch = doc.name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = filterType === 'all' || doc.mime_type?.includes(filterType);
+      const matchesType =
+        filterType === 'all' ||
+        (filterType === 'contract' && !!doc.source_contract_id) ||
+        (filterType === 'document' && !doc.source_contract_id) ||
+        doc.mime_type?.includes(filterType);
       return matchesSearch && matchesType;
     })
     .sort((a, b) => {
       switch (sortBy) {
-        case 'name-asc':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'name-desc':
-          return (b.name || '').localeCompare(a.name || '');
-        case 'size-asc':
-          return (a.file_size || 0) - (b.file_size || 0);
-        case 'size-desc':
-          return (b.file_size || 0) - (a.file_size || 0);
-        case 'date-asc':
-          return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+        case 'name-asc': return (a.name || '').localeCompare(b.name || '');
+        case 'name-desc': return (b.name || '').localeCompare(a.name || '');
+        case 'size-asc': return (a.file_size || 0) - (b.file_size || 0);
+        case 'size-desc': return (b.file_size || 0) - (a.file_size || 0);
+        case 'date-asc': return new Date(a.created_at || 0) - new Date(b.created_at || 0);
         case 'date-desc':
-        default:
-          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        default: return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       }
     });
 
   const toggleSelectItem = (id) => {
-    const newSelection = new Set(selectedItems);
-    if (newSelection.has(id)) {
-      newSelection.delete(id);
-    } else {
-      newSelection.add(id);
-    }
-    setSelectedItems(newSelection);
+    const s = new Set(selectedItems);
+    s.has(id) ? s.delete(id) : s.add(id);
+    setSelectedItems(s);
   };
 
   const toggleSelectAll = () => {
-    if (selectedItems.size === filteredDocuments.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(filteredDocuments.map((d) => d.id)));
-    }
+    setSelectedItems(
+      selectedItems.size === filteredDocuments.length
+        ? new Set()
+        : new Set(filteredDocuments.map((d) => d.id))
+    );
   };
 
   const formatMimeType = (mime) => {
@@ -209,19 +217,11 @@ export default function DocumentsManagement() {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
       'application/vnd.ms-excel': 'XLS',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-      'application/vnd.ms-powerpoint': 'PPT',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
       'text/plain': 'TXT',
       'text/markdown': 'MD',
-      'image/jpeg': 'JPG',
-      'image/png': 'PNG',
-      'image/gif': 'GIF',
-      'image/webp': 'WEBP',
     };
     if (map[mime]) return map[mime];
-    // fallback: lấy phần sau dấu / hoặc sau dấu .
-    const sub = mime.split('/').pop() || mime;
-    return sub.split('.').pop().toUpperCase().slice(0, 10);
+    return mime.split('/').pop().toUpperCase().slice(0, 10);
   };
 
   const formatFileSize = (bytes) => {
@@ -231,22 +231,26 @@ export default function DocumentsManagement() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
+  const contractCount = documents.filter((d) => d.source_contract_id).length;
+  const docOnlyCount = documents.length - contractCount;
+
   return (
     <div className="management-page">
       <PageHero
         icon={<FileText size={32} />}
         title="Quản lý Tài Liệu"
-        subtitle="Lưu trữ, tìm kiếm và quản lý toàn bộ tài liệu hỗ trợ pháp lý"
+        subtitle="Kho văn bản tổng hợp — bao gồm tài liệu thông thường và hợp đồng đã upload"
         pills={[
           `${loading && !loadedOnce ? '...' : documents.length} tài liệu`,
-          `${loading && !loadedOnce ? '...' : (documents.reduce((sum, d) => sum + (d.file_size || 0), 0) / (1024 * 1024)).toFixed(1)} MB`
+          `${contractCount} hợp đồng`,
+          `${docOnlyCount} tài liệu khác`,
         ]}
       />
 
       {/* Action Bar */}
       <div className="management-actions">
-        <button 
-          type="button" 
+        <button
+          type="button"
           className="action-btn action-btn--primary"
           onClick={() => setShowUploadModal(true)}
         >
@@ -255,12 +259,12 @@ export default function DocumentsManagement() {
         </button>
         {selectedItems.size > 0 && (
           <>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="action-btn action-btn--tertiary"
               onClick={() => {
-                selectedItems.forEach(id => {
-                  const doc = documents.find(d => d.id === id);
+                selectedItems.forEach((id) => {
+                  const doc = documents.find((d) => d.id === id);
                   if (doc) handleDownload(doc);
                 });
               }}
@@ -268,8 +272,8 @@ export default function DocumentsManagement() {
               <Download size={16} />
               Tải xuống ({selectedItems.size})
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="action-btn action-btn--danger"
               onClick={() => handleDelete(Array.from(selectedItems))}
             >
@@ -295,10 +299,11 @@ export default function DocumentsManagement() {
         <div className="filter-group">
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="filter-select">
             <option value="all">Tất cả loại</option>
+            <option value="contract">Hợp đồng</option>
+            <option value="document">Tài liệu thông thường</option>
             <option value="pdf">PDF</option>
             <option value="docx">Word</option>
             <option value="text">Text</option>
-            <option value="image">Hình ảnh</option>
           </select>
 
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
@@ -306,8 +311,8 @@ export default function DocumentsManagement() {
             <option value="date-asc">Cũ nhất</option>
             <option value="name-asc">Tên (A-Z)</option>
             <option value="name-desc">Tên (Z-A)</option>
-            <option value="size-desc">Kích thước (Lớn đến nhỏ)</option>
-            <option value="size-asc">Kích thước (Nhỏ đến lớn)</option>
+            <option value="size-desc">Kích thước lớn đến nhỏ</option>
+            <option value="size-asc">Kích thước nhỏ đến lớn</option>
           </select>
 
           <div className="view-toggle">
@@ -342,7 +347,7 @@ export default function DocumentsManagement() {
           <h3>{documents.length === 0 ? 'Chưa có tài liệu' : 'Không tìm thấy tài liệu'}</h3>
           <p>
             {documents.length === 0
-              ? 'Upload tài liệu hỗ trợ để bắt đầu'
+              ? 'Upload tài liệu hoặc hợp đồng để bắt đầu'
               : 'Thử thay đổi tiêu chí tìm kiếm'}
           </p>
         </div>
@@ -373,7 +378,7 @@ export default function DocumentsManagement() {
             </thead>
             <tbody>
               {filteredDocuments.map((doc) => (
-                <tr key={doc.id}>
+                <tr key={doc.id} className={doc.source_contract_id ? 'row-contract-linked' : ''}>
                   <td>
                     <input
                       type="checkbox"
@@ -382,7 +387,19 @@ export default function DocumentsManagement() {
                     />
                   </td>
                   <td className="col-name">
-                    <span className="doc-name">{doc.name || 'Không có tên'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="doc-name">{doc.name || 'Không có tên'}</span>
+                      {doc.source_contract_id && (
+                        <span
+                          className="wf-badge"
+                          style={{ background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          title={`Hợp đồng: ${CONTRACT_TYPE_LABELS[doc.source_contract?.contract_type] || 'Hợp đồng'}`}
+                        >
+                          <Scale size={10} />
+                          {CONTRACT_TYPE_LABELS[doc.source_contract?.contract_type] || 'Hợp đồng'}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>{formatMimeType(doc.mime_type)}</td>
                   <td>{formatFileSize(doc.file_size)}</td>
@@ -390,26 +407,16 @@ export default function DocumentsManagement() {
                     {doc.created_at ? new Date(doc.created_at).toLocaleDateString('vi-VN') : '-'}
                   </td>
                   <td className="col-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      title="Xem"
-                      onClick={() => handleView(doc)}
-                    >
+                    <button type="button" className="icon-btn" title="Xem" onClick={() => handleView(doc)}>
                       <Eye size={16} />
                     </button>
-                    <button 
-                      type="button" 
-                      className="icon-btn" 
-                      title="Tải xuống"
-                      onClick={() => handleDownload(doc)}
-                    >
+                    <button type="button" className="icon-btn" title="Tải xuống" onClick={() => handleDownload(doc)}>
                       <Download size={16} />
                     </button>
-                    <button 
-                      type="button" 
-                      className="icon-btn icon-btn--danger" 
-                      title="Xóa"
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--danger"
+                      title={doc.source_contract_id ? 'Xóa (sẽ xóa hợp đồng liên kết)' : 'Xóa'}
                       onClick={() => handleDelete([doc.id])}
                     >
                       <Trash2 size={16} />
@@ -423,12 +430,20 @@ export default function DocumentsManagement() {
       ) : (
         <div className="management-grid">
           {filteredDocuments.map((doc) => (
-            <div key={doc.id} className="doc-card">
+            <div key={doc.id} className={`doc-card${doc.source_contract_id ? ' doc-card--contract' : ''}`}>
               <div className="doc-card-header">
                 <input type="checkbox" checked={selectedItems.has(doc.id)} onChange={() => toggleSelectItem(doc.id)} />
+                {doc.source_contract_id && (
+                  <span
+                    style={{ marginLeft: 'auto', background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', fontSize: '0.7rem', padding: '2px 7px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                  >
+                    <Scale size={9} />
+                    {CONTRACT_TYPE_LABELS[doc.source_contract?.contract_type] || 'Hợp đồng'}
+                  </span>
+                )}
               </div>
               <div className="doc-card-content">
-                <FileText size={32} />
+                {doc.source_contract_id ? <Scale size={28} style={{ color: '#a5b4fc' }} /> : <FileText size={28} />}
                 <h4>{doc.name || 'Không có tên'}</h4>
                 <p className="doc-type">{formatMimeType(doc.mime_type)}</p>
                 <p className="doc-size">{formatFileSize(doc.file_size)}</p>
@@ -441,6 +456,14 @@ export default function DocumentsManagement() {
                   </button>
                   <button type="button" className="icon-btn" title="Tải" onClick={() => handleDownload(doc)}>
                     <Download size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--danger"
+                    title={doc.source_contract_id ? 'Xóa (sẽ xóa hợp đồng liên kết)' : 'Xóa'}
+                    onClick={() => handleDelete([doc.id])}
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>

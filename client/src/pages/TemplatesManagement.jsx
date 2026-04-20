@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, Zap, Star, ChevronRight, Copy, X, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Zap, Star, Copy, X, FileText, PlusCircle, Trash2, Settings2, Tag } from 'lucide-react';
 import PageHero from '../components/ui/PageHero';
 import { CopyPlus } from 'lucide-react';
 import DraftEditor from '../components/DraftEditor';
 import DraftListModal from '../components/DraftListModal';
 import { fetchWithAuth } from '../utils/fetchWithAuth';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -116,11 +120,289 @@ const FIELD_MAPPING = {
     label: 'Giá trị hợp đồng',
     description: 'Nhập tổng giá trị hợp đồng (đơn vị: VND)',
     placeholder: 'VD: 100000000'
+  },
+  
+  // Official Letter - Công văn
+  sender_name: {
+    label: 'Tên người gửi',
+    description: 'Nhập họ tên người gửi văn bản',
+    placeholder: 'VD: Nguyễn Văn A'
+  },
+  sender_department: {
+    label: 'Phòng ban trực thuộc',
+    description: 'Nhập tên phòng ban gửi văn bản',
+    placeholder: 'VD: Phòng Hành chính - Nhân sự'
+  },
+  recipient_name: {
+    label: 'Tên người nhận (hoặc Cơ quan nhận)',
+    description: 'Nhập tên cơ quan, tổ chức hoặc cá nhân nhận văn bản',
+    placeholder: 'VD: Công ty TNHH ABC / Ông Trần Văn B'
+  },
+  subject: {
+    label: 'Trích yếu nội dung (Tiêu đề)',
+    description: 'Nhập tiêu đề khái quát nội dung của văn bản',
+    placeholder: 'VD: V/v Hợp tác kinh doanh'
+  },
+  content: {
+    label: 'Nội dung chi tiết',
+    description: 'Nhập nội dung chi tiết của văn bản',
+    placeholder: 'VD: Căn cứ vào biên bản ghi nhớ...'
+  },
+  
+  // Decision - Quyết định
+  issuer_position: {
+    label: 'Chức vụ người ban hành',
+    description: 'Nhập chức vụ của người có thẩm quyền ban hành',
+    placeholder: 'VD: Giám đốc'
+  },
+  decision_title: {
+    label: 'Tên Quyết định',
+    description: 'Nhập tiêu đề hoặc tên của quyết định',
+    placeholder: 'VD: Quyết định thành lập ban dự án mới'
+  },
+  decision_content: {
+    label: 'Nội dung quyết định',
+    description: 'Nhập chi tiết các điều khoản quyết định',
+    placeholder: 'VD: Điều 1: Cử ông Nguyễn Văn A làm Trưởng ban...'
+  },
+  announcement_date: {
+    label: 'Ngày công bố',
+    description: 'Nhập ngày công bố quyết định (định dạng: DD/MM/YYYY)',
+    placeholder: 'VD: 10/05/2024'
+  },
+  
+  // Appointment - Bổ nhiệm
+  old_position: {
+    label: 'Chức vụ cũ',
+    description: 'Nhập chức vụ hiện tại/cũ của nhân sự',
+    placeholder: 'VD: Phó phòng Marketing'
+  },
+  new_position: {
+    label: 'Chức vụ mới',
+    description: 'Nhập chức vụ mới được bổ nhiệm',
+    placeholder: 'VD: Trưởng phòng Marketing'
+  },
+  appointment_date: {
+    label: 'Ngày bổ nhiệm',
+    description: 'Nhập ngày quyết định bổ nhiệm bắt đầu có hiệu lực',
+    placeholder: 'VD: 01/06/2024'
   }
 };
 
+const TEMPLATE_CATEGORIES = [
+  { value: 'hop_dong_lao_dong', label: 'Hợp đồng lao động' },
+  { value: 'hop_dong_dich_vu', label: 'Hợp đồng dịch vụ' },
+  { value: 'hop_dong_thuong_mai', label: 'Hợp đồng thương mại' },
+  { value: 'hop_dong_mua_ban', label: 'Hợp đồng mua bán' },
+  { value: 'thong_bao', label: 'Thông báo nội bộ' },
+  { value: 'cong_van', label: 'Công văn' },
+  { value: 'quyet_dinh', label: 'Quyết định' },
+  { value: 'bien_ban', label: 'Biên bản' },
+  { value: 'bao_cao', label: 'Báo cáo' },
+  { value: 'other', label: 'Khác' },
+];
+
+// ─── Toolbar nhỏ cho template editor ─────────────────────────────────────────
+function MiniToolbar({ editor }) {
+  if (!editor) return null;
+  return (
+    <div className="template-editor-toolbar">
+      {[
+        { label: 'B', cmd: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold'), title: 'Đậm' },
+        { label: <em>I</em>, cmd: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic'), title: 'Nghiêng' },
+        { label: <span style={{ textDecoration: 'underline' }}>U</span>, cmd: () => editor.chain().focus().toggleUnderline().run(), active: editor.isActive('underline'), title: 'Gạch chân' },
+      ].map((btn, i) => (
+        <button key={i} type="button" className={btn.active ? 'active' : ''} onClick={btn.cmd} title={btn.title}>{btn.label}</button>
+      ))}
+      <span className="toolbar-sep" />
+      {['H1','H2','H3'].map((h, i) => (
+        <button key={h} type="button" className={editor.isActive('heading', { level: i+1 }) ? 'active' : ''} onClick={() => editor.chain().focus().toggleHeading({ level: i+1 }).run()} title={`Tiêu đề ${i+1}`}>{h}</button>
+      ))}
+      <span className="toolbar-sep" />
+      <button type="button" className={editor.isActive('bulletList') ? 'active' : ''} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Danh sách">●</button>
+      <button type="button" className={editor.isActive('orderedList') ? 'active' : ''} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Danh sách số">1.</button>
+      <span className="toolbar-sep" />
+      <button type="button" onClick={() => editor.chain().focus().undo().run()} title="Hoàn tác">↶</button>
+      <button type="button" onClick={() => editor.chain().focus().redo().run()} title="Làm lại">↷</button>
+    </div>
+  );
+}
+
+// ─── Modal tạo / chỉnh sửa mẫu văn bản ──────────────────────────────────────
+function CreateTemplateModal({ template, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: template?.name || '',
+    category: template?.category || 'other',
+    description: template?.description || '',
+  });
+  const [variables, setVariables] = useState(
+    Array.isArray(template?.variables) ? template.variables : []
+  );
+  const [newVar, setNewVar] = useState({ key: '', label: '', placeholder: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isEdit = !!template?.id;
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    ],
+    content: template?.content || '<p>Nhập nội dung mẫu văn bản tại đây...</p>',
+  });
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const insertVariable = (key) => {
+    if (!editor) return;
+    editor.chain().focus().insertContent(`{{${key}}}`).run();
+  };
+
+  const addVariable = () => {
+    if (!newVar.key.trim()) return;
+    const key = newVar.key.trim().replace(/\s+/g, '_').toLowerCase();
+    if (variables.find((v) => v.key === key)) return;
+    setVariables((prev) => [...prev, { key, label: newVar.label || key, placeholder: newVar.placeholder || '' }]);
+    setNewVar({ key: '', label: '', placeholder: '' });
+  };
+
+  const removeVariable = (key) => {
+    setVariables((prev) => prev.filter((v) => v.key !== key));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError('Tên mẫu là bắt buộc.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      const body = {
+        ...form,
+        content: editor?.getHTML() || '',
+        variables,
+      };
+      const url = isEdit ? `/v1/templates/${template.id}` : '/v1/templates';
+      const method = isEdit ? 'PATCH' : 'POST';
+      const res = await fetchWithAuth(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { /* non-JSON response */ }
+      if (res.ok) {
+        onSaved?.();
+        onClose();
+      } else {
+        setError(data.error || text || 'Lưu thất bại.');
+      }
+    } catch (err) {
+      setError('Lỗi kết nối server: ' + (err?.message || ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="cm-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cm-modal create-template-modal">
+        <div className="cm-modal-header">
+          <h3>{isEdit ? 'Chỉnh sửa mẫu văn bản' : 'Tạo mẫu văn bản mới'}</h3>
+          <button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        <form className="create-template-body" onSubmit={handleSubmit}>
+          {/* Left: metadata + variables */}
+          <div className="create-template-sidebar">
+            <div className="cm-field">
+              <label>Tên mẫu <span className="req">*</span></label>
+              <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="VD: Hợp đồng lao động thử việc" required />
+            </div>
+
+            <div className="cm-field">
+              <label>Danh mục</label>
+              <select value={form.category} onChange={(e) => set('category', e.target.value)}>
+                {TEMPLATE_CATEGORIES.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="cm-field">
+              <label>Mô tả ngắn</label>
+              <textarea rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Mô tả mục đích của mẫu..." />
+            </div>
+
+            {/* Variables manager */}
+            <div className="template-vars-section">
+              <h4 className="template-vars-title"><Tag size={14} /> Biến điền vào</h4>
+              <p className="template-vars-hint">
+                Thêm các trường biến để người dùng điền khi tạo văn bản.
+                Nhấn tên biến để chèn vào nội dung.
+              </p>
+
+              {variables.map((v) => (
+                <div key={v.key} className="template-var-row">
+                  <button type="button" className="template-var-chip" onClick={() => insertVariable(v.key)} title="Nhấn để chèn vào nội dung">
+                    {`{{${v.key}}}`}
+                  </button>
+                  <span className="template-var-label">{v.label}</span>
+                  <button type="button" className="icon-btn" onClick={() => removeVariable(v.key)}><X size={12} /></button>
+                </div>
+              ))}
+
+              <div className="template-var-add">
+                <input
+                  placeholder="tên_biến (không dấu, gạch_dưới)"
+                  value={newVar.key}
+                  onChange={(e) => setNewVar((s) => ({ ...s, key: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addVariable())}
+                />
+                <input
+                  placeholder="Nhãn hiển thị (VD: Tên công ty)"
+                  value={newVar.label}
+                  onChange={(e) => setNewVar((s) => ({ ...s, label: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addVariable())}
+                />
+                <button type="button" className="action-btn action-btn--tertiary" onClick={addVariable}>
+                  <PlusCircle size={14} /> Thêm
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: TipTap editor */}
+          <div className="create-template-editor">
+            <div className="create-template-editor-label">
+              <Settings2 size={14} /> Thiết kế nội dung mẫu
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 8 }}>
+                Dùng {`{{tên_biến}}`} để đánh dấu chỗ điền
+              </span>
+            </div>
+            <MiniToolbar editor={editor} />
+            <EditorContent editor={editor} className="create-template-editor-content" />
+          </div>
+        </form>
+
+        {error && <p style={{ color: '#dc2626', padding: '0 1.5rem', margin: 0, fontSize: '0.82rem' }}>{error}</p>}
+
+        <div className="cm-modal-footer">
+          <button type="button" className="action-btn action-btn--tertiary" onClick={onClose}>Hủy</button>
+          <button type="button" className="action-btn action-btn--primary" onClick={handleSubmit} disabled={busy}>
+            {busy ? 'Đang lưu...' : isEdit ? 'Lưu thay đổi' : 'Tạo mẫu văn bản'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TemplatesManagement() {
   const [templates, setTemplates] = useState([]);
+  const [drafts, setDrafts] = useState([]);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -134,6 +416,11 @@ export default function TemplatesManagement() {
   const [draftResult, setDraftResult] = useState(null);
   const [draftError, setDraftError] = useState(null);
   
+  // Template create/edit
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [fetchError, setFetchError] = useState('');
+
   // Draft Editor states
   const [editingDraft, setEditingDraft] = useState(null);
   const [showDraftEditor, setShowDraftEditor] = useState(false);
@@ -141,32 +428,60 @@ export default function TemplatesManagement() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftValidation, setDraftValidation] = useState({});
 
+  const fetchTemplates = async () => {
+    setLoading(true);
+    setFetchError('');
+    try {
+      const response = await fetchWithAuth(`${API_URL}/v1/templates`);
+      if (response.ok) {
+        const data = await response.json();
+        setTemplates(data.templates || []);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setFetchError(data.error || `Lỗi ${response.status}: Không thể tải danh sách mẫu.`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+      setFetchError('Không thể kết nối server. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDrafts = async () => {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/v1/drafts`);
+      if (response.ok) {
+        const data = await response.json();
+        setDrafts(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch drafts:', error);
+    }
+  };
+
+  const handleDeleteCustomTemplate = async (templateId) => {
+    if (!window.confirm('Xóa mẫu văn bản này?')) return;
+    try {
+      const res = await fetchWithAuth(`${API_URL}/v1/templates/${templateId}`, { method: 'DELETE' });
+      if (res.ok) fetchTemplates();
+    } catch { /* ignore */ }
+  };
+
   // Fetch templates
   useEffect(() => {
-    const fetchTemplates = async () => {
-      try {
-        const token = localStorage.getItem('longpl_token');
-        const response = await fetch(`${API_URL}/v1/templates`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setTemplates(data.templates || []);
-        }
-      } catch (error) {
-        console.error('Failed to fetch templates:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTemplates();
+    fetchDrafts();
   }, []);
 
-  const filteredTemplates = templates.filter((template) => {
-    const matchesSearch = template.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || template.category === filterCategory;
+  const filteredDrafts = drafts.filter((draft) => {
+    const template = templates.find(t => t.id === draft.template_id);
+    const category = template ? template.category : 'other';
+    
+    const draftName = draft.title || template?.name || 'Văn bản không tên';
+    const matchesSearch = draftName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = filterCategory === 'all' || category === filterCategory;
+    
     return matchesSearch && matchesCategory;
   });
 
@@ -238,9 +553,11 @@ export default function TemplatesManagement() {
       }
 
       // Open the draft in editor immediately
-      setEditingDraft(draft.data);
-      setShowModal(false);
-      setShowDraftEditor(true);
+      fetchDrafts();
+        fetchDrafts();
+        setEditingDraft(draft.data);
+        setShowModal(false);
+        setShowDraftEditor(true);
     } catch (error) {
       console.error('Error generating draft:', error);
       setDraftError(error.message || 'Lỗi không xác định');
@@ -249,6 +566,18 @@ export default function TemplatesManagement() {
     }
   };
 
+  
+  const handleSaveAsTemplate = ({ content, draftName }) => {
+    setShowDraftEditor(false);
+    const originalTemplate = templates.find((t) => t.id === editingDraft.template_id);
+    setEditingTemplate({
+      name: `Mẫu từ: ${draftName || 'Văn bản không tên'}`,
+      category: originalTemplate ? originalTemplate.category : 'other',
+      description: 'Mẫu được tạo từ văn bản đã soạn thảo',
+      content: content,
+    });
+    setShowCreateTemplate(true);
+  };
   const handleSaveDraft = async ({ content, changeSummary }) => {
     if (!editingDraft) return;
 
@@ -271,7 +600,9 @@ export default function TemplatesManagement() {
       setEditingDraft(updated.data);
       
       // Show success message
-      alert('✓ Draft đã được lưu thành công!');
+      fetchDrafts();
+        fetchDrafts();
+        alert('✓ Draft đã được lưu thành công!');
     } catch (error) {
       console.error('Error saving draft:', error);
       alert('❌ Lỗi: ' + error.message);
@@ -362,25 +693,33 @@ export default function TemplatesManagement() {
   };
 
   const categories = [
-    { value: 'all', label: '📋 Tất cả' },
-    { value: 'official', label: '📄 Công văn' },
-    { value: 'decision', label: '📋 Quyết định' },
-    { value: 'notice', label: '📌 Thông báo' },
-    { value: 'service', label: '🤝 Hợp đồng dịch vụ' },
-    { value: 'employment', label: '👨‍💼 Hợp đồng lao động' },
-  ];
+  { value: 'all', label: '📋 Tất cả' },
+  { value: 'official', label: '📄 Công văn' },
+  { value: 'decision', label: '📋 Quyết định' },
+  { value: 'notice', label: '📌 Thông báo' },
+  { value: 'service', label: '🤝 Hợp đồng dịch vụ' },
+  { value: 'employment', label: '👨‍💼 Hợp đồng lao động' },
+];
 
   return (
     <div className="management-page">
       <PageHero
         icon={<CopyPlus size={32} />}
-        title="Quản lý Mẫu Văn Bản"
-        subtitle="Thư viện mẫu sẵn sàng để tạo và xuất tài liệu pháp lý chuyên nghiệp"
-        pills={[`${templates.length} mẫu`, `${favorites.size} yêu thích`]}
+        title="Quản lý Văn Bản"
+        subtitle="Quản lý các văn bản đã tạo từ mẫu"
+        pills={[`${drafts.length} văn bản`, `${favorites.size} ưu tiên`]}
       />
 
       {/* Search & Filter Bar + Draft List Button */}
       <div className="management-toolbar templates-toolbar">
+        <button
+            type="button"
+            className="action-btn action-btn--primary"
+            onClick={() => setShowTemplateSelector(true)}
+          >
+            <PlusCircle size={16} /> Tạo văn bản mới
+          </button>
+
         <div className="search-box">
           <Search size={16} />
           <input
@@ -390,15 +729,6 @@ export default function TemplatesManagement() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-
-        <button 
-          className="btn btn--secondary"
-          onClick={() => setShowDraftList(true)}
-          style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
-        >
-          <FileText size={16} />
-          Xem Drafts
-        </button>
 
         <div className="category-filter">
           {categories.map((cat) => (
@@ -414,75 +744,72 @@ export default function TemplatesManagement() {
         </div>
       </div>
 
-      {/* Templates Grid */}
-      {loading ? (
-        <div className="management-empty">
-          <p>Đang tải dữ liệu...</p>
-        </div>
-      ) : filteredTemplates.length === 0 ? (
-        <div className="management-empty">
-          <CopyPlus size={48} />
-          <h3>{templates.length === 0 ? 'Chưa có mẫu' : 'Không tìm thấy mẫu'}</h3>
-          <p>
-            {templates.length === 0
-              ? 'Mẫu sẽ được thêm từ backend'
-              : 'Thử thay đổi tiêu chí tìm kiếm'}
-          </p>
-        </div>
-      ) : (
-        <div className="templates-grid">
-          {filteredTemplates.map((template) => (
-            <div key={template.id} className="template-card">
-              <div className="template-header">
-                <div className="template-icon">{template.icon || '📄'}</div>
-                <button
-                  type="button"
-                  className={`favorite-btn ${favorites.has(template.id) ? 'active' : ''}`}
-                  onClick={() => toggleFavorite(template.id)}
-                  title="Thêm vào yêu thích"
-                >
-                  <Star size={16} />
-                </button>
-              </div>
-
-              <div className="template-content">
-                <h3>{template.name || 'Mẫu không tên'}</h3>
-                <p className="template-desc">{template.description || 'Mô tả chưa sẵn sàng'}</p>
-
-                {template.tags && template.tags.length > 0 && (
-                  <div className="template-tags">
-                    {template.tags.slice(0, 3).map((tag, idx) => (
-                      <span key={idx} className="tag">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="template-stats">
-                  {template.usage_count && (
-                    <span className="stat">
-                      <Zap size={12} />
-                      {template.usage_count} lần sử dụng
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="template-actions">
-                <button 
-                  type="button" 
-                  className="template-btn template-btn--primary"
-                  onClick={() => handleCreateFromTemplate(template)}
-                >
-                  <Copy size={14} />
-                  Tạo từ mẫu
-                </button>
-              </div>
-            </div>
-          ))}
+      {fetchError && (
+        <div style={{ margin: '0 0 1rem', padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, color: '#dc2626', fontSize: '0.85rem' }}>
+          ⚠ {fetchError}
         </div>
       )}
+
+      {/* Templates Grid */}
+                    {loading && <div className="management-empty"><p>Đang tải dữ liệu...</p></div>}
+              {!loading && filteredDrafts.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b', gridColumn: '1 / -1' }}>
+                  <FileText size={48} style={{ opacity: 0.2, marginBottom: '1rem', display: 'inline-block' }} />
+                  <p>Chưa có văn bản nào trong mục này. Bấm "Tạo văn bản mới" để bắt đầu.</p>
+                </div>
+              ) : (!loading && (
+                <div className="templates-grid">
+                {filteredDrafts.map((draft) => {
+                  const template = templates.find((t) => t.id === draft.template_id);
+                  const draftName = draft.title || template?.name || 'Văn bản không tên';
+                  const isFav = favorites.has(draft.id);
+                  
+                  return (
+                    <div key={draft.id} className="template-card">
+                      <div className="template-header">
+                        <div className="template-icon">{template?.icon || '📝'}</div>
+                        <button
+                          type="button"
+                          className={`favorite-btn ${isFav ? 'active' : ''}`}
+                          onClick={() => {
+                            const next = new Set(favorites);
+                            if (next.has(draft.id)) next.delete(draft.id);
+                            else next.add(draft.id);
+                            setFavorites(next);
+                          }}
+                        >
+                          <Star size={16} />
+                        </button>
+                      </div>
+                      
+                      <div className="template-content">
+                        <h3>{draftName}</h3>
+                        <p className="template-desc" style={{ marginBottom: '10px' }}>Từ mẫu: <strong>{template?.name || 'Tuỳ chỉnh'}</strong></p>
+                        
+                        <div style={{display:'flex', gap:'5px'}}>
+                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#e0e7ff', color: '#1d4ed8', borderRadius: '12px' }}>
+                            {draft.status === 'draft' ? '📝 Bản nháp' : draft.status === 'review' ? '👀 Chờ duyệt' : draft.status === 'approved' ? '✅ Đã duyệt' : draft.status === 'signed' ? '✍️ Đã ký' : draft.status}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#ffedd5', color: '#c2410c', borderRadius: '12px' }}>
+                            v{draft.version || 1}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="template-actions" style={{display:'flex', justifyContent:'flex-end'}}>
+                        <button
+                          type="button"
+                          className="template-btn template-btn--primary-gradient"
+                          onClick={() => handleOpenDraft(draft.id)}
+                        >
+                           Mở văn bản
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                </div>
+              ))}
 
       {/* Modal: Create from Template */}
       {showModal && selectedTemplate && (
@@ -616,18 +943,65 @@ export default function TemplatesManagement() {
               onCancel={() => setShowDraftEditor(false)}
               onExport={handleExportDraft}
               validationResult={draftValidation}
+              onSaveAsTemplate={handleSaveAsTemplate}
             />
           </div>
         </div>
       )}
 
       {/* Draft List Modal */}
-      {showDraftList && (
-        <DraftListModal
-          templateId={selectedTemplate?.id}
-          onSelectDraft={handleOpenDraft}
-          onClose={() => setShowDraftList(false)}
+
+      {/* Create / Edit Template Modal */}
+      {showCreateTemplate && (
+        <CreateTemplateModal
+          template={editingTemplate}
+          onClose={() => { setShowCreateTemplate(false); setEditingTemplate(null); }}
+          onSaved={() => { fetchTemplates(); }}
         />
+      )}
+
+      {/* Template Selector Modal */}
+      {showTemplateSelector && (
+        <div className="modal-overlay" onClick={() => setShowTemplateSelector(false)}>
+          <div className="modal-content" style={{ maxWidth: '900px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Chọn biểu mẫu để tạo</h2>
+              <button className="close-btn" onClick={() => setShowTemplateSelector(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', background: '#f8fafc', padding: '1.5rem' }}>
+              <div className="templates-grid">
+                {templates.map((template) => (
+                  <div key={template.id} className="template-card">
+                    <div className="template-header">
+                      <div className="template-icon">{template.icon || '📄'}</div>
+                    </div>
+                    
+                    <div className="template-content">
+                      <h3>{template.name}</h3>
+                      <p className="template-desc">{template.description}</p>
+                    </div>
+                    
+                    <div className="template-actions">
+                      <button
+                        type="button"
+                        className="template-btn template-btn--primary"
+                        onClick={() => {
+                          setShowTemplateSelector(false);
+                          handleCreateFromTemplate(template);
+                        }}
+                      >
+                         Tạo từ mẫu này
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
