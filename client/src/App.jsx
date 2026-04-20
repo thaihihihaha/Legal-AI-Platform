@@ -27,7 +27,7 @@ import AdminPanel from './pages/AdminPanel';
 import { fetchWithAuth, logout } from './utils/fetchWithAuth.js';
 import { TokenStorage, validateStoredTokens } from './utils/tokenUtils.js';
 import { setUser as setReduxUser, clearAuth } from './store/slices/authSlice.js';
-import './app.css';
+import './App.css';
 import './styles/management-pages.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
