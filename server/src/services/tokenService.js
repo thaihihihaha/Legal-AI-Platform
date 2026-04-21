@@ -18,8 +18,7 @@ export const generateAccessToken = (user) => {
       id: user.id,
       email: user.email,
       companyId: user.company_id || null,
-      is_super_admin: user.is_super_admin || false,
-      is_active: user.is_active !== false, // default true if not explicitly false
+      is_active: user.is_active !== false,
       role: user.role || 'member',
       type: 'access',
     },

@@ -103,7 +103,7 @@ export const requireAction =
     }
 
     // ✨ Owner and SuperAdmin bypass: They have full access to all actions
-    if (req.user.role === 'owner' || req.user.is_super_admin) {
+    if (req.user.role === 'admin') {
       return next();
     }
 
@@ -132,7 +132,7 @@ export const requireActionAny =
     }
 
     // ✨ Owner and SuperAdmin bypass: They have full access to all actions
-    if (req.user.role === 'owner' || req.user.is_super_admin) {
+    if (req.user.role === 'admin') {
       return next();
     }
 
@@ -159,17 +159,8 @@ export const requireActionAny =
 export const checkOwnershipOrAdmin = async (req, resourceOwnerId) => {
   if (!req.user) return false;
 
-  // ✨ Owner and SuperAdmin can access anything
-  if (req.user.role === 'owner' || req.user.is_super_admin) {
-    return true;
-  }
+  if (req.user.role === 'admin') return true;
 
-  // Admins can do anything
-  if (hasMinimumRole(req.user.role, 'admin')) {
-    return true;
-  }
-
-  // Owner can only modify their own
   return req.user.id === resourceOwnerId;
 };
 

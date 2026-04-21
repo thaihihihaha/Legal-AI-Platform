@@ -1,5 +1,5 @@
 /**
- * Enhanced Token Management Utilities
+ * Token Management Utilities
  * Handles token refresh, validation, and expiry
  */
 
@@ -55,51 +55,33 @@ export const TokenStorage = {
 
 // ─── Token Utilities ───────────────────────────────────────────────────────
 
-/**
- * Decode JWT token without verification
- */
 function decodeToken(token) {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(atob(parts[1]));
-    return payload;
+    return JSON.parse(atob(parts[1]));
   } catch {
     return null;
   }
 }
 
-/**
- * Check if token is expired
- */
 export function isTokenExpired(token) {
   const decoded = decodeToken(token);
   if (!decoded || !decoded.exp) return true;
   return decoded.exp * 1000 < Date.now();
 }
 
-/**
- * Get time until token expiry (in seconds)
- */
 export function getTokenTTL(token) {
   const decoded = decodeToken(token);
   if (!decoded || !decoded.exp) return -1;
   return Math.floor(decoded.exp - Date.now() / 1000);
 }
 
-/**
- * Check if token should be refreshed proactively
- * Returns true if token expires within 5 minutes
- */
 export function shouldRefreshToken(token) {
   const ttl = getTokenTTL(token);
   return ttl > 0 && ttl < 300; // 5 minutes
 }
 
-/**
- * Validate token structure and signature check
- */
 export function validateToken(token) {
   if (!token || typeof token !== 'string') return false;
   if (token.split('.').length !== 3) return false;
@@ -109,84 +91,79 @@ export function validateToken(token) {
 
 // ─── Token Refresh Logic ───────────────────────────────────────────────────
 
-let refreshPromise = null; // Prevent concurrent refresh requests
+let refreshPromise = null;
 
 /**
- * Refresh access token using refresh token
+ * Refresh access token.
+ * Returns new access token string, or null if refresh is not possible.
+ * NEVER calls handleTokenExpiry directly — callers decide what to do.
+ *
+ * Handles race condition: if another concurrent refresh already succeeded
+ * (e.g. rapid F5), we detect the token changed in localStorage and reuse it.
  */
 async function refreshAccessToken() {
-  const refreshToken = TokenStorage.getRefreshToken();
+  const refreshTokenSnapshot = TokenStorage.getRefreshToken();
 
-  if (!refreshToken) {
-    // No refresh token, must logout
-    handleTokenExpiry();
-    throw new Error('No refresh token available');
+  if (!refreshTokenSnapshot) {
+    return null;
   }
 
   try {
     const response = await fetch(`${API_URL}/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refresh_token: refreshTokenSnapshot }),
     });
 
     if (!response.ok) {
       if (response.status === 401) {
-        handleTokenExpiry();
+        // This refresh token was rejected. Check if a concurrent request
+        // (another rapid F5 tab/load) already refreshed successfully and
+        // wrote new tokens to localStorage.
+        const currentRefreshToken = TokenStorage.getRefreshToken();
+        const currentAccessToken = TokenStorage.getAccessToken();
+        if (
+          currentRefreshToken !== refreshTokenSnapshot &&
+          currentAccessToken &&
+          !isTokenExpired(currentAccessToken)
+        ) {
+          // Race condition resolved: another load already refreshed — reuse
+          return currentAccessToken;
+        }
+        // Truly invalid — clear tokens so caller can redirect to login
+        TokenStorage.clearTokens();
+        return null;
       }
-      throw new Error('Token refresh failed');
+      // Non-401 server error (500 etc.) — don't clear tokens, may be transient
+      return null;
     }
 
     const data = await response.json();
-
-    // Store new tokens
     TokenStorage.setTokens(data.token, data.refresh_token);
-
+    if (data.user) TokenStorage.setUser(data.user);
     return data.token;
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    handleTokenExpiry();
-    throw error;
+  } catch {
+    // Network error (no connection, server down momentarily).
+    // Do NOT clear tokens or redirect — the session is still stored.
+    // The user will get 401s on API calls and can retry naturally.
+    return null;
   }
 }
 
 /**
- * Auto-refresh token if needed before making request
+ * Deduplicated token refresh — concurrent callers share one promise.
  */
 async function autoRefreshToken() {
-  const accessToken = TokenStorage.getAccessToken();
-
-  if (!accessToken || isTokenExpired(accessToken)) {
-    // Token expired, must refresh
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken()
-        .finally(() => {
-          refreshPromise = null;
-        });
-    }
-    return refreshPromise;
-  } else if (shouldRefreshToken(accessToken)) {
-    // Token expiring soon, refresh proactively
-    if (!refreshPromise) {
-      refreshPromise = refreshAccessToken()
-        .catch(() => {
-          // Silently fail - token still valid for now
-        })
-        .finally(() => {
-          refreshPromise = null;
-        });
-    }
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
   }
-
-  return accessToken;
+  return refreshPromise;
 }
 
 // ─── HTTP Request Handler ──────────────────────────────────────────────────
 
-/**
- * Enhanced fetch with automatic token refresh
- * Replaces the old fetchWithAuth
- */
 export async function fetchWithAuth(url, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -195,51 +172,35 @@ export async function fetchWithAuth(url, options = {}) {
 
   let accessToken = TokenStorage.getAccessToken();
 
-  // Auto-refresh if needed
-  if (shouldRefreshToken(accessToken) || isTokenExpired(accessToken)) {
-    try {
-      accessToken = await autoRefreshToken();
-    } catch {
-      // Refresh failed, continue with current token
-      // Server will return 401 if token is invalid
+  // Proactively refresh if token is expired or about to expire
+  if (!accessToken || isTokenExpired(accessToken) || shouldRefreshToken(accessToken)) {
+    const newToken = await autoRefreshToken();
+    if (newToken) {
+      accessToken = newToken;
     }
+    // If newToken is null: network error or truly expired.
+    // Continue with current (possibly expired) token — server will 401.
+    accessToken = accessToken || TokenStorage.getAccessToken();
   }
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  // Convert relative URLs to absolute URLs using API_URL
   const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
 
-  const response = await fetch(fullUrl, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(fullUrl, { ...options, headers });
 
-  // Handle 401 - token might have expired between refresh check and request
+  // Handle 401 — try one more refresh then retry the original request
   if (response.status === 401) {
-    // Try refresh one more time
-    const refreshToken = TokenStorage.getRefreshToken();
-    if (refreshToken && !isTokenExpired(accessToken)) {
-      // Token should be valid but server rejected it
-      // This shouldn't happen, but try refresh anyway
-      try {
-        accessToken = await refreshAccessToken();
-        headers.Authorization = `Bearer ${accessToken}`;
-
-        return fetch(fullUrl, {
-          ...options,
-          headers,
-        });
-      } catch {
-        handleTokenExpiry();
-        throw new Error('Token invalid. Please log in again.');
-      }
-    } else {
-      handleTokenExpiry();
-      throw new Error('Token expired. Please log in again.');
+    const newToken = await autoRefreshToken();
+    if (newToken) {
+      headers.Authorization = `Bearer ${newToken}`;
+      return fetch(fullUrl, { ...options, headers });
     }
+    // Refresh failed — tokens cleared → trigger logout
+    handleTokenExpiry();
+    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
   }
 
   return response;
@@ -247,31 +208,23 @@ export async function fetchWithAuth(url, options = {}) {
 
 // ─── Graceful Logout ───────────────────────────────────────────────────────
 
-/**
- * Handle token expiry gracefully
- */
 export function handleTokenExpiry() {
   TokenStorage.clearTokens();
-
-  // Dispatch custom event so app can react
   window.dispatchEvent(
     new CustomEvent('token-expired', {
-      detail: { message: 'Your session has expired. Please log in again.' },
+      detail: { message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' },
     })
   );
-
-  // Redirect to login
-  window.location.href = '/login';
+  // Only redirect if not already on login page
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
 }
 
-/**
- * Logout user - revoke all tokens
- */
 export async function logout() {
   const accessToken = TokenStorage.getAccessToken();
   const refreshToken = TokenStorage.getRefreshToken();
 
-  // Try to notify server
   if (accessToken && refreshToken) {
     try {
       await fetch(`${API_URL}/v1/auth/logout`, {
@@ -282,61 +235,91 @@ export async function logout() {
         },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Continue with client-side logout anyway
+    } catch {
+      // Proceed with client-side logout regardless
     }
   }
 
-  // Clear tokens
   TokenStorage.clearTokens();
-
-  // Redirect to login
   window.location.href = '/login';
 }
 
-// ─── On App Start - Validate Tokens ────────────────────────────────────────
+// ─── On App Start — Validate Tokens ────────────────────────────────────────
 
 /**
- * Validate and restore tokens on app startup
- * Call this when app initializes
+ * Validate and optionally refresh tokens on app startup (called on each F5).
+ *
+ * Strategy:
+ * - Access token valid and not expiring → true immediately (no network call)
+ * - Access token expiring soon → refresh proactively; if refresh fails but
+ *   token still valid, still return true
+ * - Access token expired → attempt refresh; if refresh returns null due to
+ *   network error, return false gracefully WITHOUT clearing tokens so the
+ *   user can retry on next load
+ * - Access token expired AND server explicitly rejected (tokens cleared by
+ *   refreshAccessToken) → return false
  */
 export async function validateStoredTokens() {
   const accessToken = TokenStorage.getAccessToken();
   const refreshToken = TokenStorage.getRefreshToken();
 
-  // No tokens stored
+  // Nothing stored
   if (!accessToken || !refreshToken) {
     return false;
   }
 
-  // Validate token format
+  // Malformed token
   if (!validateToken(accessToken)) {
     TokenStorage.clearTokens();
     return false;
   }
 
-  // Token already expired or expiring very soon
-  if (isTokenExpired(accessToken) || shouldRefreshToken(accessToken)) {
-    try {
-      const newToken = await refreshAccessToken();
-      return !!newToken;
-    } catch {
-      TokenStorage.clearTokens();
-      return false;
-    }
+  // Token still valid and has enough life left
+  if (!isTokenExpired(accessToken) && !shouldRefreshToken(accessToken)) {
+    return true;
   }
 
-  // Tokens valid
-  return true;
+  // Token expired or expiring soon — attempt refresh
+  const tokenWasExpired = isTokenExpired(accessToken);
+  const newToken = await autoRefreshToken();
+
+  if (newToken) {
+    return true;
+  }
+
+  // Refresh returned null. Two possible causes:
+  // 1. Network error — tokens may still be in localStorage
+  // 2. Server 401 — tokens already cleared by refreshAccessToken
+
+  const currentAccess = TokenStorage.getAccessToken();
+  const currentRefresh = TokenStorage.getRefreshToken();
+
+  // Tokens were cleared → genuinely expired and server confirmed
+  if (!currentAccess || !currentRefresh) {
+    return false;
+  }
+
+  // Tokens still in localStorage — network error during refresh.
+  // If the access token hadn't expired yet, stay logged in.
+  if (!tokenWasExpired) {
+    return true;
+  }
+
+  // Access token was expired and refresh failed due to network error.
+  // Allow up to 60-second grace period to avoid logout on transient network issues.
+  const ttl = getTokenTTL(accessToken); // negative means expired
+  const expiredSecondsAgo = Math.abs(ttl);
+  if (expiredSecondsAgo < 60) {
+    return true;
+  }
+
+  // Token has been expired too long and refresh isn't working
+  TokenStorage.clearTokens();
+  return false;
 }
 
-// ─── Token Monitoring ──────────────────────────────────────────────────────
+// ─── Token Monitor ─────────────────────────────────────────────────────────
 
-/**
- * Start monitoring token expiry
- * Useful for frontend to show warnings or refresh proactively
- */
 export function startTokenMonitor(onWarning, onExpiry) {
   let intervalId = null;
 
@@ -346,33 +329,21 @@ export function startTokenMonitor(onWarning, onExpiry) {
       clearInterval(intervalId);
       return;
     }
-
     const ttl = getTokenTTL(token);
-
     if (ttl <= 0) {
-      // Token expired
       onExpiry?.();
     } else if (ttl < 300) {
-      // Token expiring within 5 minutes
       onWarning?.(ttl);
     }
   }
 
-  // Check every 30 seconds
   intervalId = setInterval(checkToken, 30000);
-
-  // Check immediately
   checkToken();
-
-  // Return cleanup function
   return () => clearInterval(intervalId);
 }
 
 // ─── Backward Compatibility ───────────────────────────────────────────────
 
-/**
- * Get token (for backward compatibility)
- */
 export function getToken() {
   return TokenStorage.getAccessToken();
 }

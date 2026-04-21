@@ -170,6 +170,16 @@ router.patch('/:draftId', async (req, res) => {
     const { content, title, changeSummary } = req.body;
     const userId = req.user.id;
 
+    // Support for renaming (title provided, no content)
+    if (title && !content) {
+      const { prisma } = await import('../lib/prisma.js');
+      const updatedTitle = await prisma.draftGenerated.update({
+        where: { id: draftId },
+        data: { title, updated_at: new Date(), updated_by: userId }
+      });
+      return res.json({ success: true, data: updatedTitle });
+    }
+
     if (!content) {
       return res.status(400).json({
         success: false,

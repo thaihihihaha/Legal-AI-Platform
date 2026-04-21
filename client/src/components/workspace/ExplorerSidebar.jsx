@@ -11,6 +11,7 @@ import {
   Shield,
   Scale,
   Tags,
+  UserCircle,
 } from 'lucide-react';
 
 export default function ExplorerSidebar({ contracts, expanded, toggle, navigate, user }) {
@@ -23,6 +24,7 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate,
     isActive('/documents-management') ||
     isActive('/templates-management') ||
     isActive('/category-tags-management');
+  const isSettingsActive = isActive('/settings') || isActive('/admin') || isActive('/profile');
 
   return (
     <nav className="sidebar-explorer" aria-label="Điều hướng chính">
@@ -110,6 +112,52 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate,
           <Search size={16} />
           <span>Tra cứu luật</span>
         </button>
+
+        {/* Cài đặt - collapsible parent */}
+        <button
+          type="button"
+          className={`sidebar-nav-item sidebar-nav-parent${isSettingsActive ? ' active' : ''}`}
+          onClick={() => toggle('settings')}
+          aria-expanded={expanded.settings}
+        >
+          <Settings size={16} />
+          <span>Cài đặt</span>
+          <span className="sidebar-nav-arrow">
+            {expanded.settings ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </span>
+        </button>
+
+        {expanded.settings && (
+          <div className="sidebar-subnav">
+            {user?.role === 'admin' && (
+              <button
+                type="button"
+                className={`sidebar-nav-item sidebar-nav-sub${isActive('/admin') ? ' active' : ''}`}
+                onClick={() => navigate('/admin')}
+                title="Quản lý người dùng"
+              >
+                <Shield size={14} />
+                <span>Quản lý người dùng</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className={`sidebar-nav-item sidebar-nav-sub${isActive('/profile') ? ' active' : ''}`}
+              onClick={() => navigate('/profile')}
+            >
+              <UserCircle size={14} />
+              <span>Hồ sơ cá nhân</span>
+            </button>
+            <button
+              type="button"
+              className={`sidebar-nav-item sidebar-nav-sub${isActive('/settings') ? ' active' : ''}`}
+              onClick={() => navigate('/settings')}
+            >
+              <Settings size={14} />
+              <span>Cài đặt chung</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Recent contracts */}
@@ -135,27 +183,8 @@ export default function ExplorerSidebar({ contracts, expanded, toggle, navigate,
         </div>
       )}
 
-      {/* Footer - Settings & Admin */}
+      {/* Footer is empty or can be removed completely */}
       <div className="sidebar-footer">
-        {user?.is_super_admin && (
-          <button
-            type="button"
-            className={`sidebar-nav-item${isActive('/admin') ? ' active' : ''}`}
-            onClick={() => navigate('/admin')}
-            title="Bảng điều khiển admin"
-          >
-            <Shield size={16} />
-            <span>Admin</span>
-          </button>
-        )}
-        <button
-          type="button"
-          className={`sidebar-nav-item${isActive('/settings') ? ' active' : ''}`}
-          onClick={() => navigate('/settings')}
-        >
-          <Settings size={16} />
-          <span>Cài đặt</span>
-        </button>
       </div>
     </nav>
   );

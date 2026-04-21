@@ -428,6 +428,9 @@ export default function TemplatesManagement() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftValidation, setDraftValidation] = useState({});
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
   const fetchTemplates = async () => {
     setLoading(true);
     setFetchError('');
@@ -478,12 +481,22 @@ export default function TemplatesManagement() {
     const template = templates.find(t => t.id === draft.template_id);
     const category = template ? template.category : 'other';
     
+    // Default draftName if none matches
     const draftName = draft.title || template?.name || 'Văn bản không tên';
-    const matchesSearch = draftName.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Match based on searchQuery
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = draftName.toLowerCase().includes(searchLower) || 
+                          (template?.name || '').toLowerCase().includes(searchLower);
+    
+    // Match based on category
     const matchesCategory = filterCategory === 'all' || category === filterCategory;
     
     return matchesSearch && matchesCategory;
   });
+
+  const totalPages = Math.ceil(filteredDrafts.length / itemsPerPage);
+  const paginatedDrafts = filteredDrafts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const toggleFavorite = (id) => {
     const newFavorites = new Set(favorites);
@@ -696,8 +709,12 @@ export default function TemplatesManagement() {
     if (!confirm('Bạn có chắc muốn xóa văn bản này?')) return;
     try {
       const res = await fetchWithAuth(API_URL + '/v1/drafts/' + id, { method: 'DELETE' });
-      if (res.success) setDrafts(prev => prev.filter(d => d.id !== id));
-      else alert('Lỗi xóa: ' + (res.error || 'Unknown'));
+      if (res.ok || res.success) {
+        setDrafts(prev => prev.filter(d => d.id !== id));
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert('Lỗi xóa: ' + (errData.error || res.statusText || 'Unknown'));
+      }
     } catch (err) { alert('Lỗi hệ thống: ' + err.message); }
   };
 
@@ -707,11 +724,16 @@ export default function TemplatesManagement() {
     try {
       const res = await fetchWithAuth(API_URL + '/v1/drafts/' + id, {
         method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle })
       });
-      if (res.success) {
+      // The API doesn't return res.success, we should check res.ok
+      if (res.ok || res.success) {
         setDrafts(prev => prev.map(d => d.id === id ? { ...d, title: newTitle } : d));
-      } else alert('Lỗi đổi tên: ' + (res.error || 'Unknown'));
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert('Lỗi đổi tên: ' + (errData.error || res.statusText || 'Unknown'));
+      }
     } catch (err) { alert('Lỗi hệ thống: ' + err.message); }
   };
 
@@ -725,27 +747,28 @@ export default function TemplatesManagement() {
       />
 
       {/* Search & Filter Bar + Draft List Button */}
-      <div className="management-toolbar templates-toolbar">
+      <div className="management-toolbar templates-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'stretch' }}>
         
 
-        <div className="search-box">
-          <Search size={16} />
+        <div className="search-box" style={{ flex: '1 1 auto', minWidth: '300px', height: '48px', padding: '0 1rem', display: 'flex', alignItems: 'center', margin: 0 }}>
+          <Search size={18} style={{ color: '#94a3b8', marginRight: '8px' }} />
           <input
             type="text"
             placeholder="Tìm mẫu văn bản..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ height: '100%', fontSize: '1rem' }}
           />
         </div>
 
-        <div className="create-cta-box" style={{ marginLeft: 'auto' }}>
+        <div className="create-cta-box" style={{ flex: '0 0 auto', display: 'flex' }}>
           <button
             type="button"
-            className="action-btn action-btn--primary"
+            className="action-btn cta-create-pulse"
             onClick={() => setShowTemplateSelector(true)}
-            style={{ padding: '0.75rem 1.5rem', background: 'var(--primary)', color: 'white', fontWeight: 'bold', fontSize: '1rem', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+            style={{ height: '48px', padding: '0 1.75rem', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}
           >
-            <PlusCircle size={20} /> TẠO VĂN BẢN MỚI
+            <PlusCircle size={22} strokeWidth={2.5} /> TẠO VĂN BẢN MỚI
           </button>
         </div>
       </div>
@@ -764,15 +787,16 @@ export default function TemplatesManagement() {
                   <p>Chưa có văn bản nào trong mục này. Bấm "Tạo văn bản mới" để bắt đầu.</p>
                 </div>
               ) : (!loading && (
-                <div className="templates-grid">
-                {filteredDrafts.map((draft) => {
-                  const template = templates.find((t) => t.id === draft.template_id);
-                  const draftName = draft.title || template?.name || 'Văn bản không tên';
-                  const isFav = favorites.has(draft.id);
-                  
-                  return (
-                    <div key={draft.id} className="template-card">
-                      <div className="template-header">
+                <div className="templates-grid-wrapper">
+                  <div className="templates-grid">
+                  {paginatedDrafts.map((draft) => {
+                    const template = templates.find((t) => t.id === draft.template_id);
+                    const draftName = draft.title || template?.name || 'Văn bản không tên';
+                    const isFav = favorites.has(draft.id);
+                    
+                    return (
+                      <div key={draft.id} className="template-card">
+                        <div className="template-header">
                         <div className="template-icon">{template?.icon || '📝'}</div>
                         <button
                           type="button"
@@ -802,36 +826,81 @@ export default function TemplatesManagement() {
                         </div>
                       </div>
                       
-                      <div className="template-actions" style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: '1rem'}}>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleRenameDraft(draft.id, draftName); }}
-                              title="Đổi tên"
-                              style={{ color: '#475569', background: '#f1f5f9', padding: '6px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
-                            >
-                              <Edit size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id); }}
-                              title="Xóa"
-                              style={{ color: '#ef4444', background: '#fef2f2', padding: '6px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        <button
-                          type="button"
-                          className="template-btn template-btn--primary-gradient"
-                          onClick={() => handleOpenDraft(draft.id)}
-                        >
-                           Mở văn bản
-                        </button>
+                      <div className="template-actions">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleRenameDraft(draft.id, draftName); }}
+                            title="Đổi tên"
+                            style={{ color: '#475569', background: '#e2e8f0', width: '40px', height: '40px', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#cbd5e1'}
+                            onMouseOut={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteDraft(draft.id); }}
+                            title="Xóa"
+                            style={{ color: '#dc2626', background: '#fee2e2', width: '40px', height: '40px', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#fca5a5'}
+                            onMouseOut={(e) => e.currentTarget.style.background = '#fee2e2'}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="template-btn template-btn--primary-gradient"
+                            onClick={() => handleOpenDraft(draft.id)}
+                            style={{ flex: 1 }}
+                          >
+                             Mở văn bản
+                          </button>
+                        </div>
                       </div>
+                    );
+                  })}
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '2rem' }}>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: currentPage === 1 ? '#f8fafc' : '#fff', color: currentPage === 1 ? '#94a3b8' : '#334155', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
+                      >
+                        Trước
+                      </button>
+                      
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            style={{
+                              width: '36px', height: '36px',
+                              borderRadius: '8px',
+                              border: page === currentPage ? 'none' : '1px solid #e2e8f0',
+                              background: page === currentPage ? 'var(--primary, #3b82f6)' : '#fff',
+                              color: page === currentPage ? '#fff' : '#334155',
+                              fontWeight: page === currentPage ? 'bold' : 'normal',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: currentPage === totalPages ? '#f8fafc' : '#fff', color: currentPage === totalPages ? '#94a3b8' : '#334155', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                      >
+                        Sau
+                      </button>
                     </div>
-                  );
-                })}
+                  )}
                 </div>
               ))}
 

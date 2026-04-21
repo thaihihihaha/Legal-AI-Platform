@@ -14,6 +14,7 @@ import integrationRoutes from './routes/integration.js';
 import templateRoutes from './routes/templates.js';
 import draftsRoutes from './routes/drafts.js';
 import adminRoutes from './routes/admin.js';
+import profileRoutes from './routes/profile.js';
 import phase3Routes from './routes/phase3.js';
 import { initAI, getAIStatus } from './agents/legal_agent.js';
 import { initPinecone, getPineconeStatus } from './services/pinecone.js';
@@ -79,6 +80,7 @@ app.use('/v1/templates', requireAuth, requireActive(), templateRoutes);
 app.use('/v1/drafts', requireAuth, requireActive(), draftsRoutes);
 app.use('/v1/integration', integrationRoutes);
 app.use('/v1/admin', requireAuth, requireActive(), adminRoutes);
+app.use('/v1/profile', requireAuth, requireActive(), profileRoutes);
 app.use('/v1', requireAuth, requireActive(), phase3Routes);
 
 // Health Check

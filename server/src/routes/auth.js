@@ -3,7 +3,6 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { generateTotpSecret, verifyTotpToken, enableTOTP } from '../services/twoFactorService.js';
-import { verifyInvitationToken, markInvitationUsed } from '../services/userService.js';
 import {
   generateAccessToken,
   generateTempSessionToken,
@@ -26,59 +25,9 @@ const generateMainToken = (user) => {
 };
 
 // Đăng ký người dùng
-router.post('/register', async (req, res) => {
-  const { email, password, fullName } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email và mật khẩu là bắt buộc' });
-  }
-
-  try {
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) return res.status(400).json({ error: 'Tài khoản đã tồn tại' });
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const baseSlug = (fullName || email.split('@')[0] || 'workspace')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'workspace';
-
-    const slug = `${baseSlug}-${Date.now().toString(36)}`;
-
-    // Check if this is the first user (will be super admin)
-    const existingUsers = await prisma.user.count();
-    const isFirstUser = existingUsers === 0;
-
-    const user = await prisma.$transaction(async (tx) => {
-      const company = await tx.company.create({
-        data: {
-          name: `${fullName || email} Workspace`,
-          slug,
-        },
-      });
-
-      return tx.user.create({
-        data: {
-          company_id: company.id,
-          email,
-          password_hash: passwordHash,
-          full_name: fullName || 'User mới',
-          is_super_admin: isFirstUser, // First user is super admin
-          is_active: true,
-          role: isFirstUser ? 'owner' : 'member', // First user is owner
-        },
-      });
-    });
-
-    res.json({
-      message: 'Đăng ký thành công',
-      userId: user.id,
-      companyId: user.company_id || null,
-      is_super_admin: user.is_super_admin,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Lỗi đăng ký tài khoản' });
-  }
+// Đăng ký người dùng đã bị tắt (Chỉ Admin mới có quyền tạo)
+router.post("/register", (req, res) => {
+  res.status(403).json({ error: "Chức năng đăng ký tự do đã bị vô hiệu hóa. Vui lòng liên hệ Quản trị viên để được cấp tài khoản." });
 });
 
 // Đăng nhập
@@ -126,7 +75,7 @@ router.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.full_name,
-        is_super_admin: user.is_super_admin,
+        is_super_admin: user.role === 'admin',
         role: user.role,
       },
     });
@@ -261,7 +210,6 @@ router.post('/verify-otp', async (req, res) => {
         full_name: true,
         totp_secret: true,
         totp_enabled: true,
-        is_super_admin: true,
         role: true,
         company_id: true,
       },
@@ -288,121 +236,13 @@ router.post('/verify-otp', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.full_name,
-        is_super_admin: user.is_super_admin,
+        is_super_admin: user.role === 'admin',
         role: user.role,
       },
     });
   } catch (error) {
     console.error('OTP verify error:', error);
     res.status(500).json({ error: 'Lỗi xác thực OTP' });
-  }
-});
-
-// ─── Invitation Routes ────────────────────────────────────────────────────────────────
-
-/**
- * POST /auth/verify-invitation
- * Check if invitation token is valid
- * Body: { token }
- */
-router.post('/verify-invitation', async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ error: 'Invitation token is required' });
-    }
-
-    const invitation = await verifyInvitationToken(token);
-    if (!invitation) {
-      return res.status(401).json({ error: 'Lời mời không hợp lệ hoặc đã hết hạn' });
-    }
-
-    res.json({
-      message: 'Lời mời hợp lệ',
-      email: invitation.email,
-      role: invitation.role,
-    });
-  } catch (error) {
-    console.error('Invitation verify error:', error);
-    res.status(500).json({ error: 'Lỗi kiểm tra lời mời' });
-  }
-});
-
-/**
- * POST /auth/accept-invitation
- * Accept invitation and create user account
- * Body: { token, password, full_name }
- */
-router.post('/accept-invitation', async (req, res) => {
-  const { token, password, full_name } = req.body;
-
-  if (!token || !password) {
-    return res.status(400).json({ error: 'Token và password là bắt buộc' });
-  }
-
-  try {
-    // Verify token
-    const invitation = await verifyInvitationToken(token);
-    if (!invitation) {
-      return res.status(401).json({ error: 'Lời mời không hợp lệ hoặc đã hết hạn' });
-    }
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: invitation.email },
-    });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Tài khoản đã tồn tại' });
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Create user with invitation role
-    const user = await prisma.$transaction(async (tx) => {
-      // Use first user's company or create new one
-      const firstUser = await tx.user.findFirst({
-        select: { company_id: true },
-      });
-
-      const companyId = firstUser?.company_id;
-
-      if (!companyId) {
-        throw new Error('Không tìm thấy công ty. Vui lòng kiểm tra lại.');
-      }
-
-      const newUser = await tx.user.create({
-        data: {
-          email: invitation.email,
-          password_hash: passwordHash,
-          full_name: full_name || invitation.email.split('@')[0],
-          role: invitation.role,
-          is_active: true,
-          company_id: companyId,
-        },
-      });
-
-      // Mark invitation as used
-      await tx.invitationToken.update({
-        where: { token },
-        data: {
-          used_at: new Date(),
-          used_by: newUser.id,
-        },
-      });
-
-      return newUser;
-    });
-
-    res.json({
-      message: 'Đăng ký từ lời mời thành công',
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
-  } catch (error) {
-    console.error('Accept invitation error:', error);
-    res.status(500).json({ error: error.message || 'Lỗi chấp nhận lời mời' });
   }
 });
 
@@ -449,7 +289,7 @@ router.post('/refresh', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.full_name,
-        is_super_admin: user.is_super_admin,
+        is_super_admin: user.role === 'admin',
         role: user.role,
       },
     });

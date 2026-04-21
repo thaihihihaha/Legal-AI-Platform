@@ -75,6 +75,22 @@ const extractText = async (filePath, ext) => {
   }
 };
 
+// ─── GET /count — Đếm tổng tài liệu ─────────────────────────────────────────
+router.get('/count', async (req, res) => {
+  try {
+    const companyId = await resolveCompanyId(req.user);
+    if (!companyId) return res.json({ count: 0 });
+
+    const count = await prisma.document.count({
+      where: { company_id: companyId, deleted_at: null },
+    });
+
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: 'Không thể đếm tài liệu.' });
+  }
+});
+
 // ─── GET / — Danh sách tài liệu ──────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
@@ -275,7 +291,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Permission check: Allow if user is admin/owner OR if user is the document owner
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'owner' || req.user.is_super_admin;
+    const isAdmin = req.user.role === 'admin';
     const isDocumentOwner = document.uploaded_by === req.user.id;
 
     if (!isAdmin && !isDocumentOwner) {

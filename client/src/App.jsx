@@ -24,6 +24,7 @@ import TemplatesManagement from './pages/TemplatesManagement';
 import CategoryTagsManagement from './pages/CategoryTagsManagement';
 import LegalSearchPage from './pages/LegalSearchPage';
 import AdminPanel from './pages/AdminPanel';
+import UserProfile from './pages/UserProfile';
 import { fetchWithAuth, logout } from './utils/fetchWithAuth.js';
 import { TokenStorage, validateStoredTokens } from './utils/tokenUtils.js';
 import { setUser as setReduxUser, clearAuth } from './store/slices/authSlice.js';
@@ -32,29 +33,14 @@ import './styles/management-pages.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
-function AuthScreen({ mode, setMode, form, setForm, onSubmit, pending }) {
+function AuthScreen({ form, setForm, onSubmit, pending }) {
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <h1>{mode === 'login' ? 'Đăng nhập hệ thống' : 'Tạo tài khoản mới'}</h1>
+        <h1>Đăng nhập hệ thống</h1>
         <p>Kết nối vào Legal workspace để quản lý hợp đồng và tra cứu pháp lý.</p>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit();
-          }}
-        >
-          {mode === 'register' && (
-            <div className="auth-field">
-              <label>Họ và tên</label>
-              <input
-                value={form.fullName}
-                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                placeholder="Nguyen Van A"
-              />
-            </div>
-          )}
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
           <div className="auth-field">
             <label>Email</label>
             <input
@@ -75,16 +61,13 @@ function AuthScreen({ mode, setMode, form, setForm, onSubmit, pending }) {
           </div>
 
           <button className="auth-submit" disabled={pending} type="submit">
-            {pending ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+            {pending ? 'Đang xử lý...' : 'Đăng nhập'}
           </button>
         </form>
 
-        <div className="auth-switch">
-          {mode === 'login' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
-          <button type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
-            {mode === 'login' ? 'Đăng ký ngay' : 'Quay lại đăng nhập'}
-          </button>
-        </div>
+        <p style={{ marginTop: '16px', fontSize: '13px', color: '#64748b', textAlign: 'center' }}>
+          Liên hệ quản trị viên để được cấp tài khoản.
+        </p>
       </div>
     </div>
   );
@@ -725,6 +708,8 @@ function WorkspaceLayout({
     content = <SettingsPage />;
   } else if (pageKey.startsWith('/admin')) {
     content = <AdminPanel />;
+  } else if (pageKey.startsWith('/profile')) {
+    content = <UserProfile />;
   }
 
   return (
@@ -782,20 +767,16 @@ function WorkspaceController() {
 
   const [contracts, setContracts] = useState([]);
   const [templateCount, setTemplateCount] = useState(0);
-  const [authMode, setAuthMode] = useState('login');
+  const [documentCount, setDocumentCount] = useState(0);
   const [authPending, setAuthPending] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [authForm, setAuthForm] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-  });
+  const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [modal, setModal] = useState({ open: false, title: 'Thông báo', message: '' });
   const fileInputRef = useRef(null);
 
   const stats = {
     contracts: contracts.length,
-    documents: 0,
+    documents: documentCount,
     templates: templateCount,
   };
 
@@ -841,35 +822,41 @@ function WorkspaceController() {
   }, []);
 
   const fetchContracts = async () => {
-    const response = await fetchWithAuth(`${API_URL}/v1/contracts`);
+    let response;
+    try {
+      response = await fetchWithAuth(`${API_URL}/v1/contracts`);
+    } catch {
+      // fetchWithAuth only throws when auth is confirmed expired.
+      // handleTokenExpiry() has already been called → redirect in progress.
+      return;
+    }
 
     if (!response.ok) {
-      throw new Error('Không thể tải danh sách hợp đồng.');
+      // Server error (500 etc.) — don't logout, just show empty state
+      console.warn('Could not load contracts:', response.status);
+      setContracts([]);
+      return;
     }
 
     const payload = await response.json();
-    const items = Array.isArray(payload.contracts) ? payload.contracts : [];
-    setContracts(items);
+    setContracts(Array.isArray(payload.contracts) ? payload.contracts : []);
   };
 
   useEffect(() => {
     if (!token) return;
 
-    fetchContracts().catch(() => {
-      openModal('Phiên đăng nhập', 'Token không hợp lệ hoặc đã hết hạn, vui lòng đăng nhập lại.');
-      TokenStorage.clearTokens();
-      setToken('');
-      setUser(null);
-      setContracts([]);
-      navigate('/login', { replace: true });
-    });
+    fetchContracts();
 
-    // Fetch template count for dashboard
     fetchWithAuth(`${API_URL}/v1/templates/count`)
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d?.count != null) setTemplateCount(d.count); })
       .catch(() => {});
-  }, [token, navigate, openModal]);
+
+    fetchWithAuth(`${API_URL}/v1/documents/count`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.count != null) setDocumentCount(d.count); })
+      .catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     if (token && (location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/')) {
@@ -883,12 +870,8 @@ function WorkspaceController() {
     }
   }, [location.pathname, token, navigate]);
 
-  useEffect(() => {
-    setAuthMode(location.pathname === '/register' ? 'register' : 'login');
-  }, [location.pathname]);
-
   const handleAuthSubmit = async () => {
-    const { email, password, fullName } = authForm;
+    const { email, password } = authForm;
     if (!email || !password) {
       openModal('Thiếu thông tin', 'Email và mật khẩu là bắt buộc.');
       return;
@@ -896,18 +879,6 @@ function WorkspaceController() {
 
     setAuthPending(true);
     try {
-      if (authMode === 'register') {
-        const registerResponse = await fetch(`${API_URL}/v1/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, fullName }),
-        });
-        const registerData = await registerResponse.json();
-        if (!registerResponse.ok) {
-          throw new Error(registerData.error || 'Đăng ký thất bại.');
-        }
-      }
-
       const loginResponse = await fetch(`${API_URL}/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -922,7 +893,7 @@ function WorkspaceController() {
       TokenStorage.setUser(loginData.user || null);
       setToken(loginData.token);
       setUser(loginData.user || null);
-      setAuthForm({ fullName: '', email: '', password: '' });
+      setAuthForm({ email: '', password: '' });
       navigate('/dashboard', { replace: true });
     } catch (error) {
       openModal('Đăng nhập', error.message || 'Không thể xác thực tài khoản.');
@@ -986,8 +957,6 @@ function WorkspaceController() {
     return (
       <>
         <AuthScreen
-          mode={authMode}
-          setMode={(nextMode) => navigate(nextMode === 'register' ? '/register' : '/login')}
           form={authForm}
           setForm={setAuthForm}
           onSubmit={handleAuthSubmit}
@@ -1039,6 +1008,7 @@ export default function App() {
         <Route path="/integrations/*" element={<WorkspaceController />} />
         <Route path="/settings/*" element={<WorkspaceController />} />
         <Route path="/admin/*" element={<WorkspaceController />} />
+        <Route path="/profile/*" element={<WorkspaceController />} />
         <Route path="*" element={<WorkspaceController />} />
       </Routes>
     </BrowserRouter>

@@ -1,9 +1,0 @@
-This is a test legal document for the Document Management system.
-
-It contains important provisions related to:
-- Document management procedures
-- Record retention policies
-- Access control requirements
-- Compliance requirements
-
-This document is used for testing the upload feature.

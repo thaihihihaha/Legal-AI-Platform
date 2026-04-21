@@ -20,7 +20,21 @@
       "Bash(powershell -Command \"Get-Process -Id 39216 | Select-Object Id,MainWindowTitle,StartTime; \\(Get-WmiObject Win32_Process -Filter 'ProcessId=39216'\\).CommandLine\")",
       "Bash(powershell -Command \"Stop-Process -Id 39216 -Force; Start-Sleep -Seconds 1; Get-Process node -ErrorAction SilentlyContinue | Select-Object Id\")",
       "Bash(powershell -Command ' *)",
-      "Bash(curl -s -X DELETE http://localhost:8080/v1/templates/test-id)"
+      "Bash(curl -s -X DELETE http://localhost:8080/v1/templates/test-id)",
+      "Bash(curl -s -X POST http://localhost:8080/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"luannt@matbao.com\",\"password\":\"mb@834228\"}')",
+      "Bash(curl -s -X GET http://localhost:8080/v1/drafts -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE2Njg2ZDQ5LTA3NmEtNDk4OC1hNDE4LTkyMDIwNTM3YWI0OSIsImVtYWlsIjoibHVhbm50QG1hdGJhby5jb20iLCJjb21wYW55SWQiOiI4NWQwY2M1MS0yODU5LTRkZWMtOTU4YS1hOTQxZjBmODZhYjQiLCJpc19zdXBlcl9hZG1pbiI6dHJ1ZSwiaXNfYWN0aXZlIjp0cnVlLCJyb2xlIjoiYWRtaW4iLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzc2NzQyMTQyLCJleHAiOjE3NzY4Mjg1NDJ9.FECxQea6FB2Sc3wYztAP3j_v5ix2FEmen6CvmupctIk')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(x['id'], x.get\\('title',''\\)\\) for x in \\(d.get\\('data'\\) or []\\)]\")",
+      "Bash(curl -s -X PATCH http://localhost:8080/v1/drafts/802494ed-6ed2-4aff-ad74-39184de7a658 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE2Njg2ZDQ5LTA3NmEtNDk4OC1hNDE4LTkyMDIwNTM3YWI0OSIsImVtYWlsIjoibHVhbm50QG1hdGJhby5jb20iLCJjb21wYW55SWQiOiI4NWQwY2M1MS0yODU5LTRkZWMtOTU4YS1hOTQxZjBmODZhYjQiLCJpc19zdXBlcl9hZG1pbiI6dHJ1ZSwiaXNfYWN0aXZlIjp0cnVlLCJyb2xlIjoiYWRtaW4iLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzc2NzQyMTQyLCJleHAiOjE3NzY4Mjg1NDJ9.FECxQea6FB2Sc3wYztAP3j_v5ix2FEmen6CvmupctIk' -H 'Content-Type: application/json' -d '{\"title\":\"Test đổi tên\"}')",
+      "Bash(wmic process *)",
+      "Bash(powershell \"Get-Process -Id 27712 | Select-Object -ExpandProperty Path\")",
+      "Bash(node --experimental-vm-modules src/scripts/cleanup-deleted-users.js)",
+      "Bash(node src/scripts/migrate-roles.js)",
+      "Bash(npx prisma *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(Get-Process node *)",
+      "Bash(Stop-Process -Force)",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Select-String \"Generated|Error\")"
     ]
   }
 }

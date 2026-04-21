@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Tags, FolderTree, Plus, Pencil, Trash2, Check, X, RefreshCw, Tag,
 } from 'lucide-react';
 import CategoryTree from '../components/shared/CategoryTree.jsx';
+import PageHero from '../components/ui/PageHero';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -122,31 +123,32 @@ function TagsPanel() {
   };
 
   return (
-    <div className="ctm-panel">
-      <div className="ctm-panel-header">
-        <h3 className="ctm-panel-title">
-          <Tag size={16} />
-          Quản lý Tags
+    <div className="management-table-container" style={{ padding: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(226, 232, 240, 0.8)' }}>
+        <h3 style={{ margin: 0, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b' }}>
+          <Tag size={18} />
+          Quản lý Nhãn (Tags)
         </h3>
-        <div className="ctm-panel-actions">
-          <button className="ctm-refresh-btn" onClick={fetchTags} title="Làm mới">
-            <RefreshCw size={14} />
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button className="action-btn action-btn--tertiary" onClick={fetchTags} title="Làm mới">
+            <RefreshCw size={16} /> Làm mới
           </button>
           <button
-            className="ctm-add-btn"
+            className="action-btn action-btn--primary"
             onClick={() => { setCreating(true); setTimeout(() => newInputRef.current?.focus(), 50); }}
           >
-            <Plus size={14} /> Tạo Tag
+            <Plus size={16} /> Tạo Tag mới
           </button>
         </div>
       </div>
 
       {creating && (
-        <div className="ctm-create-form">
-          <div className="ctm-create-row">
+        <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <input
               ref={newInputRef}
-              className="ctm-input"
+              className="search-box"
+              style={{ flex: 1, padding: '0.5rem 1rem', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none' }}
               placeholder="Tên tag..."
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -155,20 +157,24 @@ function TagsPanel() {
                 if (e.key === 'Escape') { setCreating(false); setNewName(''); }
               }}
             />
-            <button className="ctm-btn ctm-btn--ok" onClick={handleCreate} disabled={busy}>
-              <Check size={13} /> Tạo
+            <button className="action-btn action-btn--primary" onClick={handleCreate} disabled={busy}>
+              <Check size={16} /> {busy ? 'Đang tạo' : 'Tạo mới'}
             </button>
-            <button className="ctm-btn" onClick={() => { setCreating(false); setNewName(''); }}>
-              <X size={13} /> Hủy
+            <button className="action-btn action-btn--tertiary" onClick={() => { setCreating(false); setNewName(''); }}>
+              <X size={16} /> Hủy
             </button>
           </div>
-          <div className="ctm-color-row">
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.875rem', color: '#64748b', marginRight: '0.5rem', lineHeight: '24px' }}>Màu sắc: </span>
             {TAG_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
-                className={`ctm-color-dot${newColor === c ? ' ctm-color-dot--active' : ''}`}
-                style={{ background: c }}
+                style={{
+                  width: '24px', height: '24px', borderRadius: '50%', background: c, border: newColor === c ? '3px solid #fff' : 'none',
+                  boxShadow: newColor === c ? `0 0 0 2px ${c}` : '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'all 0.2s',
+                  transform: newColor === c ? 'scale(1.1)' : 'scale(1)'
+                }}
                 onClick={() => setNewColor(c)}
               />
             ))}
@@ -177,23 +183,23 @@ function TagsPanel() {
       )}
 
       {loading ? (
-        <p className="ctm-loading">Đang tải...</p>
+        <div className="management-empty"><p>Đang tải danh sách Tag...</p></div>
       ) : tags.length === 0 ? (
-        <div className="ctm-empty">
-          <Tag size={32} className="ctm-empty-icon" />
-          <p>Chưa có tag nào</p>
-          <button className="ctm-add-btn" onClick={() => setCreating(true)}>
-            <Plus size={14} /> Tạo tag đầu tiên
+        <div className="management-empty">
+          <Tag size={48} style={{ opacity: 0.2, marginBottom: '1rem', display: 'inline-block' }} />
+          <p>Chưa có nhãn (tag) nào được tạo.</p>
+          <button className="action-btn action-btn--secondary" style={{ marginTop: '1rem' }} onClick={() => setCreating(true)}>
+            <Plus size={16} /> Tạo Tag đầu tiên
           </button>
         </div>
       ) : (
-        <div className="ctm-tag-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
           {tags.map((tag) => (
-            <div key={tag.id} className="ctm-tag-card">
+            <div key={tag.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
               {editingId === tag.id ? (
-                <div className="ctm-tag-edit">
+                <div style={{ padding: '1rem' }}>
                   <input
-                    className="ctm-input ctm-input--sm"
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px', marginBottom: '0.75rem', outline: 'none' }}
                     value={editName}
                     autoFocus
                     onChange={(e) => setEditName(e.target.value)}
@@ -202,40 +208,42 @@ function TagsPanel() {
                       if (e.key === 'Escape') setEditingId(null);
                     }}
                   />
-                  <div className="ctm-color-row ctm-color-row--sm">
+                  <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem' }}>
                     {TAG_COLORS.map((c) => (
                       <button
                         key={c}
                         type="button"
-                        className={`ctm-color-dot${editColor === c ? ' ctm-color-dot--active' : ''}`}
-                        style={{ background: c }}
+                        style={{
+                          width: '18px', height: '18px', borderRadius: '50%', background: c, border: editColor === c ? '2px solid #fff' : 'none',
+                          boxShadow: editColor === c ? `0 0 0 2px ${c}` : 'none', cursor: 'pointer'
+                        }}
                         onClick={() => setEditColor(c)}
                       />
                     ))}
                   </div>
-                  <div className="ctm-tag-edit-actions">
-                    <button className="ctm-btn ctm-btn--ok ctm-btn--xs" onClick={() => handleSaveEdit(tag.id)} disabled={busy}>
-                      <Check size={11} /> Lưu
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="action-btn action-btn--primary" style={{ padding: '4px 8px', fontSize: '0.75rem', height: '28px', flex: 1 }} onClick={() => handleSaveEdit(tag.id)} disabled={busy}>
+                      <Check size={12} /> Lưu
                     </button>
-                    <button className="ctm-btn ctm-btn--xs" onClick={() => setEditingId(null)}>
-                      <X size={11} /> Hủy
+                    <button className="action-btn action-btn--tertiary" style={{ padding: '4px 8px', fontSize: '0.75rem', height: '28px', flex: 1 }} onClick={() => setEditingId(null)}>
+                      <X size={12} /> Hủy
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="ctm-tag-card-inner">
+                <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span
-                    className="ctm-tag-pill"
-                    style={{ '--tag-color': tag.color || '#94a3b8' }}
+                    style={{ background: tag.color ? `${tag.color}15` : '#f1f5f9', color: tag.color || '#475569', padding: '6px 12px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: tag.color || '#94a3b8' }} />
                     {tag.name}
                   </span>
-                  <div className="ctm-tag-card-actions">
-                    <button className="ctm-icon-btn" title="Chỉnh sửa" onClick={() => startEdit(tag)}>
-                      <Pencil size={13} />
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <button className="action-btn action-btn--tertiary" style={{ padding: '6px', height: '28px', borderRadius: '6px', minWidth: 'auto' }} title="Chỉnh sửa" onClick={() => startEdit(tag)}>
+                      <Pencil size={14} />
                     </button>
-                    <button className="ctm-icon-btn ctm-icon-btn--danger" title="Xóa" onClick={() => handleDelete(tag)} disabled={busy}>
-                      <Trash2 size={13} />
+                    <button className="action-btn action-btn--danger" style={{ padding: '6px', height: '28px', borderRadius: '6px', minWidth: 'auto' }} title="Xóa" onClick={() => handleDelete(tag)} disabled={busy}>
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -259,21 +267,22 @@ function CategoriesPanel() {
   const [activeResource, setActiveResource] = useState('contract');
 
   return (
-    <div className="ctm-panel">
-      <div className="ctm-panel-header">
-        <h3 className="ctm-panel-title">
-          <FolderTree size={16} />
-          Quản lý Danh mục
+    <div className="management-table-container" style={{ padding: '1.5rem', background: 'rgba(255, 255, 255, 0.6)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(226, 232, 240, 0.8)' }}>
+        <h3 style={{ margin: 0, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b' }}>
+          <FolderTree size={18} />
+          Quản lý Cấu trúc Danh mục
         </h3>
       </div>
 
-      <div className="ctm-resource-tabs">
+      <div className="resource-tabs" style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
         {RESOURCE_TABS.map((rt) => (
           <button
             key={rt.key}
             type="button"
-            className={`ctm-resource-tab${activeResource === rt.key ? ' ctm-resource-tab--active' : ''}`}
+            className={`action-btn ${activeResource === rt.key ? 'action-btn--primary' : 'action-btn--secondary'}`}
             onClick={() => setActiveResource(rt.key)}
+            style={{ borderRadius: '10px' }}
           >
             <span>{rt.emoji}</span>
             <span>{rt.label}</span>
@@ -281,7 +290,7 @@ function CategoriesPanel() {
         ))}
       </div>
 
-      <div className="ctm-cat-tree-wrap">
+      <div className="category-tree-wrapper" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         <CategoryTree
           key={activeResource}
           resourceType={activeResource}
@@ -298,33 +307,31 @@ export default function CategoryTagsManagement() {
   const [activeTab, setActiveTab] = useState('categories');
 
   return (
-    <div className="management-page ctm-page">
-      {/* Page title */}
-      <div className="ctm-hero">
-        <div className="ctm-hero-icon">🗂️</div>
-        <div>
-          <h1 className="ctm-hero-title">Danh mục &amp; Tags</h1>
-          <p className="ctm-hero-sub">Tổ chức và phân loại văn bản theo danh mục và nhãn</p>
-        </div>
-      </div>
+    <div className="management-page">
+      <PageHero
+        icon={<FolderTree size={32} />}
+        title="Danh mục & Tags"
+        subtitle="Tổ chức và phân loại văn bản theo danh mục và nhãn"
+        pills={[]}
+      />
 
       {/* Top-level tabs */}
-      <div className="ctm-tabs">
+      <div className="management-toolbar templates-toolbar" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         <button
           type="button"
-          className={`ctm-tab${activeTab === 'categories' ? ' ctm-tab--active' : ''}`}
+          className={`action-btn ${activeTab === 'categories' ? 'action-btn--primary' : 'action-btn--secondary'}`}
           onClick={() => setActiveTab('categories')}
         >
-          <FolderTree size={15} />
+          <FolderTree size={16} />
           Danh mục
         </button>
         <button
           type="button"
-          className={`ctm-tab${activeTab === 'tags' ? ' ctm-tab--active' : ''}`}
+          className={`action-btn ${activeTab === 'tags' ? 'action-btn--primary' : 'action-btn--secondary'}`}
           onClick={() => setActiveTab('tags')}
         >
-          <Tags size={15} />
-          Tags
+          <Tags size={16} />
+          Tags quản lý
         </button>
       </div>
 

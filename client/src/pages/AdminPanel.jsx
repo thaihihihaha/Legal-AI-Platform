@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
-  Mail,
   Shield,
-  Eye,
   AlertCircle,
   Loader,
   CheckCircle,
   XCircle,
-  Download,
   Plus,
   Search,
-  Filter,
-  MoreVertical,
   RefreshCw,
+  MoreVertical,
+  Trash2,
+  Archive,
 } from 'lucide-react';
 import { fetchWithAuth } from '../utils/fetchWithAuth.js';
+import PageHero from '../components/ui/PageHero';
 import './admin-panel.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
@@ -25,12 +24,13 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
-  const [invitations, setInvitations] = useState([]);
+  const [orphanedAssets, setOrphanedAssets] = useState({ documents: [], contracts: [], drafts: [] });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('active');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -38,16 +38,16 @@ export default function AdminPanel() {
   useEffect(() => {
     if (activeTab === 'users') loadUsers();
     else if (activeTab === 'audit') loadAuditLogs();
-    else if (activeTab === 'invitations') loadInvitations();
+    else if (activeTab === 'orphaned') loadOrphanedAssets();
   }, [activeTab, filterRole, filterStatus]);
 
   const showNotification = (message, type = 'success') => {
     if (type === 'success') {
       setSuccessMessage(message);
-      setTimeout(() => setSuccessMessage(''), 4000);
+      setTimeout(() => setSuccessMessage(''), 5000);
     } else {
       setErrorMessage(message);
-      setTimeout(() => setErrorMessage(''), 4000);
+      setTimeout(() => setErrorMessage(''), 5000);
     }
   };
 
@@ -92,6 +92,9 @@ export default function AdminPanel() {
       } else if (action === 'disable-2fa') {
         url = `${endpoint}/disable-2fa`;
         method = 'POST';
+      } else if (action === 'delete') {
+        url = endpoint;
+        method = 'DELETE';
       }
 
       const res = await fetchWithAuth(url, {
@@ -100,9 +103,35 @@ export default function AdminPanel() {
         body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      
-      showNotification(`${action} thành công`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
+      showNotification(`Thao tác thành công`);
+
+      setShowModal(false);
+      loadUsers();
+    } catch (err) {
+      showNotification(`Lỗi: ${err.message}`, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateUser = async (userData) => {
+    setActionLoading(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/v1/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      showNotification('Tạo người dùng thành công');
       setShowModal(false);
       loadUsers();
     } catch (err) {
@@ -127,33 +156,56 @@ export default function AdminPanel() {
     }
   };
 
-  // ─── Invitations ───────────────────────────────────────────────────────────
-  const loadInvitations = async () => {
+  // ─── Orphaned Assets ───────────────────────────────────────────────────────
+  const loadOrphanedAssets = async () => {
     setLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/v1/admin/invitations`, { method: 'GET' });
+      const res = await fetchWithAuth(`${API_URL}/v1/admin/orphaned-assets`, { method: 'GET' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setInvitations(data.invitations || []);
+      setOrphanedAssets(data);
     } catch (err) {
-      showNotification(`Lỗi tải lời mời: ${err.message}`, 'error');
+      showNotification(`Lỗi tải tài liệu lưu trữ: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateInvitation = async (email, role) => {
+  const handleReassignAssets = async (assetType, assetIds, newUserId) => {
     setActionLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_URL}/v1/admin/invitations`, {
+      const res = await fetchWithAuth(`${API_URL}/v1/admin/orphaned-assets/reassign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ assetType, assetIds, newUserId }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showNotification('Lời mời được tạo');
-      setShowModal(false);
-      loadInvitations();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      showNotification('Chuyển nhượng tài liệu thành công');
+      loadOrphanedAssets();
+    } catch (err) {
+      showNotification(`Lỗi: ${err.message}`, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteAssets = async (assetType, assetIds) => {
+    setActionLoading(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/v1/admin/orphaned-assets`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetType, assetIds }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      showNotification('Đã xóa tài liệu thành công');
+      loadOrphanedAssets();
     } catch (err) {
       showNotification(`Lỗi: ${err.message}`, 'error');
     } finally {
@@ -162,29 +214,18 @@ export default function AdminPanel() {
   };
 
   const getRoleColor = (role) => {
-    const colors = {
-      owner: '#f59e0b',
-      admin: '#ef4444',
-      member: '#3b82f6',
-      viewer: '#6b7280',
-    };
+    const colors = { admin: '#ef4444', member: '#3b82f6' };
     return colors[role] || '#6b7280';
   };
 
   const getRoleLabel = (role) => {
-    const labels = {
-      owner: 'Chủ sở hữu',
-      admin: 'Quản trị viên',
-      member: 'Thành viên',
-      viewer: 'Xem',
-    };
+    const labels = { admin: 'Quản trị viên', member: 'Thành viên' };
     return labels[role] || role;
   };
 
-  // ─── Users Tab Content ─────────────────────────────────────────────────────
+  // ─── Users Tab ─────────────────────────────────────────────────────────────
   const renderUsersTab = () => (
     <div className="admin-tab-content">
-      {/* Filters */}
       <div className="admin-filters">
         <div className="filter-search">
           <Search size={18} />
@@ -205,28 +246,24 @@ export default function AdminPanel() {
 
         <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
           <option value="all">Tất cả vai trò</option>
-          <option value="owner">Chủ sở hữu</option>
           <option value="admin">Quản trị viên</option>
           <option value="member">Thành viên</option>
-          <option value="viewer">Xem</option>
         </select>
 
         <button className="btn-action" onClick={loadUsers} disabled={loading}>
           {loading ? <Loader size={18} /> : <RefreshCw size={18} />}
         </button>
+
+        <button className="btn-primary" onClick={() => setShowModal('create-user')}>
+          <Plus size={16} />
+          Thêm người dùng
+        </button>
       </div>
 
-      {/* Users Table */}
       {loading ? (
-        <div className="loading-state">
-          <Loader size={32} />
-          <p>Đang tải...</p>
-        </div>
+        <div className="loading-state"><Loader size={32} /><p>Đang tải...</p></div>
       ) : users.length === 0 ? (
-        <div className="empty-state">
-          <Users size={48} />
-          <p>Không tìm thấy người dùng</p>
-        </div>
+        <div className="empty-state"><Users size={48} /><p>Không tìm thấy người dùng</p></div>
       ) : (
         <div className="users-table">
           <table>
@@ -254,11 +291,9 @@ export default function AdminPanel() {
                   </td>
                   <td>{user.phone_number || '-'}</td>
                   <td>
-                    {user.totp_enabled ? (
-                      <CheckCircle size={18} style={{ color: '#10b981' }} />
-                    ) : (
-                      <XCircle size={18} style={{ color: '#9ca3af' }} />
-                    )}
+                    {user.totp_enabled
+                      ? <CheckCircle size={18} style={{ color: '#10b981' }} />
+                      : <XCircle size={18} style={{ color: '#9ca3af' }} />}
                   </td>
                   <td>
                     <span className={`status-badge ${user.is_active ? 'active' : 'inactive'}`}>
@@ -269,7 +304,14 @@ export default function AdminPanel() {
                     {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString('vi-VN') : '-'}
                   </td>
                   <td>
-                    <UserActionMenu user={user} onAction={handleUserAction} setSelected={setSelectedUser} setShowModal={setShowModal} />
+                    <UserActionMenu
+                      user={user}
+                      onAction={handleUserAction}
+                      setSelected={setSelectedUser}
+                      setShowModal={setShowModal}
+                      openMenuId={openMenuId}
+                      setOpenMenuId={setOpenMenuId}
+                    />
                   </td>
                 </tr>
               ))}
@@ -280,7 +322,7 @@ export default function AdminPanel() {
     </div>
   );
 
-  // ─── Audit Logs Tab Content ────────────────────────────────────────────────
+  // ─── Audit Logs Tab ────────────────────────────────────────────────────────
   const renderAuditTab = () => (
     <div className="admin-tab-content">
       <div className="audit-controls">
@@ -290,15 +332,9 @@ export default function AdminPanel() {
       </div>
 
       {loading ? (
-        <div className="loading-state">
-          <Loader size={32} />
-          <p>Đang tải...</p>
-        </div>
+        <div className="loading-state"><Loader size={32} /><p>Đang tải...</p></div>
       ) : auditLogs.length === 0 ? (
-        <div className="empty-state">
-          <AlertCircle size={48} />
-          <p>Chưa có hoạt động</p>
-        </div>
+        <div className="empty-state"><AlertCircle size={48} /><p>Chưa có hoạt động</p></div>
       ) : (
         <div className="audit-logs">
           <div className="audit-timeline">
@@ -321,104 +357,69 @@ export default function AdminPanel() {
     </div>
   );
 
-  // ─── Invitations Tab Content ───────────────────────────────────────────────
-  const renderInvitationsTab = () => (
-    <div className="admin-tab-content">
-      <div className="invitations-header">
-        <button className="btn-primary" onClick={() => setShowModal('create-invitation')}>
-          <Plus size={18} />
-          Tạo lời mời
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="loading-state">
-          <Loader size={32} />
-          <p>Đang tải...</p>
-        </div>
-      ) : invitations.length === 0 ? (
-        <div className="empty-state">
-          <Mail size={48} />
-          <p>Không có lời mời nào</p>
-        </div>
-      ) : (
-        <div className="invitations-list">
-          {invitations.map((invite) => (
-            <div key={invite.id} className="invitation-card">
-              <div className="invitation-info">
-                <div className="invite-email">{invite.email}</div>
-                <div className="invite-role">
-                  <span className="role-badge" style={{ backgroundColor: getRoleColor(invite.role) }}>
-                    {getRoleLabel(invite.role)}
-                  </span>
-                </div>
-              </div>
-              <div className="invitation-date">
-                <span className="expires">Hết hạn: {new Date(invite.expires_at).toLocaleDateString('vi-VN')}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+  // ─── Orphaned Assets Tab ───────────────────────────────────────────────────
+  const renderOrphanedAssetsTab = () => (
+    <OrphanedAssetsTab
+      loading={loading}
+      orphanedAssets={orphanedAssets}
+      activeUsers={users.filter(u => u.is_active)}
+      onLoad={loadOrphanedAssets}
+      onReassign={handleReassignAssets}
+      onDelete={handleDeleteAssets}
+      actionLoading={actionLoading}
+    />
   );
 
   return (
-    <div className="admin-panel">
-      {/* Notifications */}
+    <div className="management-page admin-panel">
       {successMessage && <div className="notification success">{successMessage}</div>}
       {errorMessage && <div className="notification error">{errorMessage}</div>}
 
-      {/* Header */}
-      <div className="admin-header">
-        <div className="header-content">
-          <Shield size={32} className="header-icon" />
-          <div className="header-text">
-            <h1>Quản lý Admin</h1>
-            <p>Quản lý người dùng, lịch sử hoạt động và lời mời</p>
-          </div>
-        </div>
-      </div>
+      <PageHero
+        icon={<Shield size={32} />}
+        title="Quản lý người dùng"
+        subtitle="Quản lý người dùng, lịch sử hoạt động và tài liệu lưu trữ của người dùng đã xóa"
+        pills={[]}
+      />
 
-      {/* Tabs */}
-      <div className="admin-tabs">
+      <div className="management-toolbar admin-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', background: 'transparent', border: 'none', padding: 0 }}>
         <button
-          className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+          className={`action-btn ${activeTab === 'users' ? 'action-btn--primary' : 'action-btn--secondary'}`}
           onClick={() => setActiveTab('users')}
         >
-          <Users size={20} />
+          <Users size={16} />
           <span>Người dùng</span>
         </button>
         <button
-          className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+          className={`action-btn ${activeTab === 'audit' ? 'action-btn--primary' : 'action-btn--secondary'}`}
           onClick={() => setActiveTab('audit')}
         >
-          <AlertCircle size={20} />
+          <AlertCircle size={16} />
           <span>Lịch sử hoạt động</span>
         </button>
         <button
-          className={`tab-btn ${activeTab === 'invitations' ? 'active' : ''}`}
-          onClick={() => setActiveTab('invitations')}
+          className={`action-btn ${activeTab === 'orphaned' ? 'action-btn--primary' : 'action-btn--secondary'}`}
+          onClick={() => setActiveTab('orphaned')}
         >
-          <Mail size={20} />
-          <span>Lời mời</span>
+          <Archive size={16} />
+          <span>Tài liệu lưu trữ</span>
         </button>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'users' && renderUsersTab()}
-      {activeTab === 'audit' && renderAuditTab()}
-      {activeTab === 'invitations' && renderInvitationsTab()}
+      <div className="management-table-container admin-tab-content-wrapper" style={{ padding: '1.5rem', background: 'rgba(255, 255, 255, 0.6)', borderRadius: '16px' }}>
+        {activeTab === 'users' && renderUsersTab()}
+        {activeTab === 'audit' && renderAuditTab()}
+        {activeTab === 'orphaned' && renderOrphanedAssetsTab()}
+      </div>
 
-      {/* Modals */}
       {showModal && (
         <AdminModal
           type={showModal}
           onClose={() => setShowModal(false)}
           user={selectedUser}
           onSubmit={(data) => {
-            if (showModal === 'create-invitation') {
-              handleCreateInvitation(data.email, data.role);
+            if (showModal === 'create-user') {
+              handleCreateUser(data);
             } else {
               handleUserAction(selectedUser.id, showModal, data);
             }
@@ -430,62 +431,298 @@ export default function AdminPanel() {
   );
 }
 
-// ─── User Action Menu ──────────────────────────────────────────────────────────
-function UserActionMenu({ user, onAction, setSelected, setShowModal }) {
-  const [open, setOpen] = useState(false);
+// ─── Orphaned Assets Tab Component ────────────────────────────────────────────
+function OrphanedAssetsTab({ loading, orphanedAssets, activeUsers, onLoad, onReassign, onDelete, actionLoading }) {
+  const [selectedType, setSelectedType] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [reassignUserId, setReassignUserId] = useState('');
 
-  const actions = [
-    { label: 'Cập nhật', action: 'edit', condition: !user.is_super_admin },
-    { label: 'Đặt lại mật khẩu', action: 'reset-password', condition: true },
-    { label: user.is_active ? 'Vô hiệu hóa' : 'Kích hoạt', action: user.is_active ? 'disable' : 'enable', condition: true },
-    { label: 'Tắt 2FA', action: 'disable-2fa', condition: user.totp_enabled },
-  ];
+  const { documents = [], contracts = [] } = orphanedAssets;
+  const totalAssets = documents.length + contracts.length;
+
+  const handleSelect = (type, id) => {
+    if (selectedType && selectedType !== type) {
+      setSelectedType(type);
+      setSelectedItems([id]);
+    } else {
+      setSelectedType(type);
+      setSelectedItems((prev) =>
+        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      );
+    }
+  };
+
+  const handleSelectAll = (type, items) => {
+    if (selectedType === type && selectedItems.length === items.length) {
+      setSelectedItems([]);
+      setSelectedType(null);
+    } else {
+      setSelectedType(type);
+      setSelectedItems(items.map((i) => i.id));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedItems([]);
+    setSelectedType(null);
+    setReassignUserId('');
+  };
+
+  if (loading) {
+    return <div className="loading-state"><Loader size={32} /><p>Đang tải...</p></div>;
+  }
 
   return (
-    <div className="action-menu">
-      <button className="menu-btn" onClick={() => setOpen(!open)}>
-        <MoreVertical size={18} />
-      </button>
-      {open && (
-        <div className="dropdown">
-          {actions
-            .filter((a) => a.condition)
-            .map((a) => (
+    <div className="admin-tab-content">
+      <div className="orphaned-header">
+        <div className="orphaned-summary">
+          <span className="summary-badge accent">{totalAssets} tài liệu chưa có chủ sở hữu</span>
+          {totalAssets > 0 && (
+            <span className="summary-badge" style={{ fontSize: '12px', color: '#64748b' }}>
+              Chuyển quyền sở hữu hoặc xóa vĩnh viễn
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {selectedItems.length > 0 && (
+            <>
+              <span className="selected-count">{selectedItems.length} đã chọn</span>
+              <select
+                value={reassignUserId}
+                onChange={(e) => setReassignUserId(e.target.value)}
+                className="reassign-select"
+              >
+                <option value="">-- Chọn người nhận --</option>
+                {activeUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name ? `${u.full_name} (${u.email})` : u.email}
+                  </option>
+                ))}
+              </select>
               <button
-                key={a.action}
-                className="dropdown-item"
+                className="btn-primary"
+                disabled={!reassignUserId || actionLoading}
+                onClick={() => onReassign(selectedType, selectedItems, reassignUserId).then(clearSelection)}
+              >
+                {actionLoading ? <Loader size={14} /> : 'Chuyển quyền sở hữu'}
+              </button>
+              <button
+                className="btn-danger"
+                disabled={actionLoading}
                 onClick={() => {
-                  setSelected(user);
-                  setShowModal(a.action);
-                  setOpen(false);
+                  if (window.confirm(`Xóa vĩnh viễn ${selectedItems.length} tài liệu? Không thể hoàn tác.`)) {
+                    onDelete(selectedType, selectedItems).then(clearSelection);
+                  }
                 }}
               >
-                {a.label}
+                <Trash2 size={14} />
+                Xóa vĩnh viễn
               </button>
-            ))}
+              <button className="btn-cancel" onClick={clearSelection}>Bỏ chọn</button>
+            </>
+          )}
+          <button className="btn-action" onClick={onLoad} disabled={loading}>
+            <RefreshCw size={18} />
+          </button>
+        </div>
+      </div>
+
+      {totalAssets === 0 ? (
+        <div className="empty-state">
+          <Archive size={48} />
+          <p>Không có tài liệu nào chưa có chủ sở hữu</p>
+          <small>Khi xóa người dùng, tài liệu của họ sẽ xuất hiện ở đây để chờ xử lý</small>
+        </div>
+      ) : (
+        <div className="orphaned-sections">
+          {documents.length > 0 && (
+            <AssetSection
+              title="Tài liệu"
+              type="document"
+              items={documents}
+              selectedType={selectedType}
+              selectedItems={selectedItems}
+              onSelect={handleSelect}
+              onSelectAll={handleSelectAll}
+            />
+          )}
+          {contracts.length > 0 && (
+            <AssetSection
+              title="Hợp đồng"
+              type="contract"
+              items={contracts}
+              selectedType={selectedType}
+              selectedItems={selectedItems}
+              onSelect={handleSelect}
+              onSelectAll={handleSelectAll}
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
 
+function AssetSection({ title, type, items, selectedType, selectedItems, onSelect, onSelectAll }) {
+  const isThisType = selectedType === type;
+  const allSelected = isThisType && selectedItems.length === items.length;
+
+  return (
+    <div className="asset-section">
+      <div className="asset-section-header">
+        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={() => onSelectAll(type, items)}
+          />
+          <h3 style={{ margin: 0 }}>{title} ({items.length})</h3>
+        </label>
+      </div>
+      <div className="asset-table">
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: '40px' }}></th>
+              <th>Tên</th>
+              <th>Chủ sở hữu cũ</th>
+              <th>Ngày tạo</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const isChecked = isThisType && selectedItems.includes(item.id);
+              return (
+                <tr key={item.id} className={isChecked ? 'row-selected' : ''}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => onSelect(type, item.id)}
+                    />
+                  </td>
+                  <td>{item.name || item.title || '-'}</td>
+                  <td style={{ color: '#94a3b8', fontStyle: 'italic' }}>Người dùng đã xóa</td>
+                  <td className="date-cell">{new Date(item.created_at).toLocaleDateString('vi-VN')}</td>
+                  <td><span className="status-badge inactive">{item.status || '-'}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reset Password Modal ──────────────────────────────────────────────────────
+function ResetPasswordModal({ user, onClose, onSubmit, loading }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+
+  const generateRandom = () => {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const special = '!@#$%&*';
+    const all = upper + lower + digits + special;
+    const pwd =
+      upper[Math.floor(Math.random() * upper.length)] +
+      lower[Math.floor(Math.random() * lower.length)] +
+      digits[Math.floor(Math.random() * digits.length)] +
+      special[Math.floor(Math.random() * special.length)] +
+      Array.from({ length: 8 }, () => all[Math.floor(Math.random() * all.length)]).join('');
+    setNewPassword(pwd);
+    setConfirmPassword(pwd);
+    setShowPassword(true);
+    setError('');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (newPassword.length < 6) { setError('Mật khẩu phải có ít nhất 6 ký tự'); return; }
+    if (newPassword !== confirmPassword) { setError('Mật khẩu xác nhận không khớp'); return; }
+    setError('');
+    onSubmit({ newPassword });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2>Đặt lại mật khẩu</h2>
+        <p>Đặt mật khẩu mới cho <strong>{user?.email}</strong></p>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Mật khẩu mới</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Nhập mật khẩu mới"
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="btn-cancel" onClick={generateRandom} style={{ whiteSpace: 'nowrap' }}>
+                Ngẫu nhiên
+              </button>
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Xác nhận mật khẩu</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Nhập lại mật khẩu"
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <input type="checkbox" id="rp-show" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+            <label htmlFor="rp-show" style={{ fontSize: '13px', color: '#475569', cursor: 'pointer' }}>Hiện mật khẩu</label>
+          </div>
+          {error && <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 12px' }}>{error}</p>}
+          <div className="form-actions">
+            <button type="button" className="btn-cancel" onClick={onClose}>Hủy</button>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? 'Đang lưu...' : 'Lưu mật khẩu'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Modal ───────────────────────────────────────────────────────────────
-function AdminModal({ type, onClose, user, onSubmit, loading }) {
-  const [formData, setFormData] = useState({ email: '', role: 'member' });
+function AdminModal({ type, user, onClose, onSubmit, loading }) {
+  const [formData, setFormData] = useState({
+    email: user?.email || '',
+    role: ['admin', 'member'].includes(user?.role) ? user.role : 'member',
+    full_name: user?.full_name || '',
+    phone_number: user?.phone_number || '',
+    password: '',
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(formData);
   };
 
-  if (type === 'create-invitation') {
+  if (type === 'reset-password') {
+    return <ResetPasswordModal user={user} onClose={onClose} onSubmit={onSubmit} loading={loading} />;
+  }
+
+  if (type === 'create-user') {
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <h2>Tạo lời mời mới</h2>
+          <h2>Thêm người dùng mới</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Email</label>
+              <label>Email *</label>
               <input
                 type="email"
                 required
@@ -495,19 +732,44 @@ function AdminModal({ type, onClose, user, onSubmit, loading }) {
               />
             </div>
             <div className="form-group">
+              <label>Họ và Tên *</label>
+              <input
+                type="text"
+                required
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Nhập họ tên"
+              />
+            </div>
+            <div className="form-group">
+              <label>Mật khẩu (để trống → mặc định: Abc@12345)</label>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Để trống để dùng mật khẩu mặc định"
+              />
+            </div>
+            <div className="form-group">
+              <label>Số điện thoại</label>
+              <input
+                type="text"
+                value={formData.phone_number}
+                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                placeholder="Nhập số điện thoại"
+              />
+            </div>
+            <div className="form-group">
               <label>Vai trò</label>
               <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
                 <option value="member">Thành viên</option>
                 <option value="admin">Quản trị viên</option>
-                <option value="owner">Chủ sở hữu</option>
               </select>
             </div>
             <div className="form-actions">
-              <button type="button" className="btn-cancel" onClick={onClose}>
-                Hủy
-              </button>
+              <button type="button" className="btn-cancel" onClick={onClose}>Hủy</button>
               <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? 'Đang tạo...' : 'Tạo lời mời'}
+                {loading ? 'Đang tạo...' : 'Tạo người dùng'}
               </button>
             </div>
           </form>
@@ -516,18 +778,90 @@ function AdminModal({ type, onClose, user, onSubmit, loading }) {
     );
   }
 
+  if (type === 'edit') {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <h2>Cập nhật thông tin người dùng</h2>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                disabled
+                style={{ background: '#f1f5f9', cursor: 'not-allowed' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Họ và Tên</label>
+              <input
+                type="text"
+                required
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Nhập họ tên"
+              />
+            </div>
+            <div className="form-group">
+              <label>Số điện thoại</label>
+              <input
+                type="text"
+                value={formData.phone_number}
+                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                placeholder="Nhập số điện thoại"
+              />
+            </div>
+            <div className="form-group">
+              <label>Vai trò</label>
+              <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
+                <option value="member">Thành viên</option>
+                <option value="admin">Quản trị viên</option>
+              </select>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn-cancel" onClick={onClose}>Hủy</button>
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? 'Đang cập nhật...' : 'Cập nhật'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const getActionName = () => {
+    switch (type) {
+      case 'reset-password': return 'Đặt lại mật khẩu';
+      case 'disable': return 'Vô hiệu hóa';
+      case 'enable': return 'Kích hoạt';
+      case 'disable-2fa': return 'Tắt 2FA';
+      case 'delete': return 'Xóa người dùng';
+      default: return type;
+    }
+  };
+
+  const isDelete = type === 'delete';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2>Xác nhận hành động</h2>
-        <p>Bạn chắc chắn muốn {type} cho {user?.email}?</p>
+        <p>
+          Bạn chắc chắn muốn <strong>{getActionName()}</strong> cho người dùng{' '}
+          <strong>{user?.email}</strong>?
+        </p>
+        {isDelete && (
+          <p className="delete-warning">
+            Tài liệu của người dùng này sẽ được giữ lại trong kho lưu trữ để admin xử lý.
+          </p>
+        )}
         <div className="form-actions">
-          <button type="button" className="btn-cancel" onClick={onClose}>
-            Hủy
-          </button>
+          <button type="button" className="btn-cancel" onClick={onClose}>Hủy</button>
           <button
             type="button"
-            className="btn-primary"
+            className={isDelete ? 'btn-danger' : 'btn-primary'}
             disabled={loading}
             onClick={() => onSubmit({})}
           >
@@ -535,6 +869,64 @@ function AdminModal({ type, onClose, user, onSubmit, loading }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── User Action Menu ──────────────────────────────────────────────────────────
+function UserActionMenu({ user, onAction, setSelected, setShowModal, openMenuId, setOpenMenuId }) {
+  const isOpen = openMenuId === user.id;
+  const menuRef = useRef(null);
+  const [dropUp, setDropUp] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      setDropUp(window.innerHeight - rect.bottom < 220);
+    }
+
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, setOpenMenuId]);
+
+  const actions = [
+    { label: 'Cập nhật', action: 'edit', condition: true },
+    { label: 'Đặt lại mật khẩu', action: 'reset-password', condition: true },
+    { label: user.is_active ? 'Vô hiệu hóa' : 'Kích hoạt', action: user.is_active ? 'disable' : 'enable', condition: true },
+    { label: 'Tắt 2FA', action: 'disable-2fa', condition: user.totp_enabled },
+    { label: 'Xóa người dùng', action: 'delete', condition: true, danger: true },
+  ];
+
+  return (
+    <div className="action-menu" ref={menuRef}>
+      <button className="menu-btn" onClick={() => setOpenMenuId(isOpen ? null : user.id)}>
+        <MoreVertical size={18} />
+      </button>
+      {isOpen && (
+        <div className={`dropdown${dropUp ? ' dropdown--up' : ''}`}>
+          {actions.filter((a) => a.condition).map((a) => (
+            <button
+              key={a.action}
+              className={`dropdown-item${a.danger ? ' dropdown-item--danger' : ''}`}
+              onClick={() => {
+                setSelected(user);
+                setShowModal(a.action);
+                setOpenMenuId(null);
+              }}
+            >
+              {a.danger && <Trash2 size={13} style={{ marginRight: 4 }} />}
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

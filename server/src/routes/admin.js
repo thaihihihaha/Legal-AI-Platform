@@ -8,20 +8,19 @@ import {
   enableUser,
   setUserRole,
   disable2FA,
-  setAsSuperAdmin,
-  createInvitation,
-  getPendingInvitations,
-  cancelInvitation,
-  verifyInvitationToken,
-  markInvitationUsed,
+  createUserByAdmin,
+  hardDeleteUser,
+  getOrphanedAssets,
+  reassignAssets,
+  deleteOrphanedAssets,
 } from '../services/userService.js';
 import { logAction, getAuditLogs } from '../lib/auditLog.js';
-import { requireSuperAdmin } from '../middleware/requireRole.js';
+import { requireRole } from '../middleware/requireRole.js';
 
 const router = express.Router();
 
-// Apply super admin check to all admin routes
-router.use(requireSuperAdmin());
+// Chỉ cho phép admin role truy cập
+router.use(requireRole('admin'));
 
 /**
  * GET /admin/users
@@ -67,6 +66,37 @@ router.get('/users/:id', async (req, res) => {
 });
 
 /**
+ * POST /admin/users
+ * Tạo người dùng mới bởi admin
+ */
+router.post('/users', async (req, res) => {
+  try {
+    const { email, password, full_name, role, phone_number } = req.body;
+    if (!email || !full_name) {
+      return res.status(400).json({ error: 'Email và họ tên là bắt buộc' });
+    }
+
+    const newUser = await createUserByAdmin(req.user.company_id, {
+      email, password, full_name, role, phone_number,
+    });
+
+    await logAction({
+      actor_id: req.user.id,
+      action: 'CREATE_USER',
+      resource_type: 'USER',
+      resource_id: newUser.id,
+      company_id: req.user.company_id,
+      changes: { email, role, full_name },
+    });
+
+    res.json({ message: 'Tạo người dùng thành công', user: newUser });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * PATCH /admin/users/:id
  * Update user details (name, email, phone, role)
  */
@@ -83,7 +113,6 @@ router.patch('/users/:id', async (req, res) => {
       role,
     });
 
-    // Log the change
     await logAction({
       actor_id: req.user.id,
       action: 'UPDATE',
@@ -104,14 +133,46 @@ router.patch('/users/:id', async (req, res) => {
 });
 
 /**
+ * DELETE /admin/users/:id
+ * Xóa người dùng mềm (soft delete) - tài liệu vẫn được giữ lại
+ */
+router.delete('/users/:id', async (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'Không thể tự xóa chính mình' });
+    }
+
+    const deletedId = req.params.id;
+    await hardDeleteUser(deletedId);
+
+    await logAction({
+      actor_id: req.user.id,
+      action: 'DELETE_USER',
+      resource_type: 'USER',
+      resource_id: deletedId,
+      company_id: req.user.company_id,
+    });
+
+    res.json({ message: 'Người dùng đã bị xóa. Tài liệu của họ đã được chuyển vào kho lưu trữ.' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /admin/users/:id/reset-password
  * Generate temporary password for user
  */
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
-    const { userId, tempPassword } = await resetUserPassword(req.params.id);
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+    }
 
-    // Log the action
+    const { userId } = await resetUserPassword(req.params.id, newPassword);
+
     await logAction({
       actor_id: req.user.id,
       action: 'RESET_PASSWORD',
@@ -120,11 +181,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
       company_id: req.user.company_id,
     });
 
-    res.json({
-      message: 'Password reset thành công',
-      tempPassword, // Send once - user must save it
-      userId,
-    });
+    res.json({ message: 'Đặt lại mật khẩu thành công', userId });
   } catch (error) {
     console.error('Error resetting password:', error);
     res.status(500).json({ error: error.message });
@@ -139,7 +196,6 @@ router.post('/users/:id/disable', async (req, res) => {
   try {
     const disabledUser = await disableUser(req.params.id);
 
-    // Log the action
     await logAction({
       actor_id: req.user.id,
       action: 'DISABLE',
@@ -164,7 +220,6 @@ router.post('/users/:id/enable', async (req, res) => {
   try {
     const enabledUser = await enableUser(req.params.id);
 
-    // Log the action
     await logAction({
       actor_id: req.user.id,
       action: 'ENABLE',
@@ -195,7 +250,6 @@ router.post('/users/:id/set-role', async (req, res) => {
 
     const updated = await setUserRole(req.params.id, role);
 
-    // Log the action
     await logAction({
       actor_id: req.user.id,
       action: 'SET_ROLE',
@@ -220,7 +274,6 @@ router.post('/users/:id/disable-2fa', async (req, res) => {
   try {
     const disabled = await disable2FA(req.params.id);
 
-    // Log the action
     await logAction({
       actor_id: req.user.id,
       action: 'DISABLE_2FA',
@@ -237,119 +290,78 @@ router.post('/users/:id/disable-2fa', async (req, res) => {
   }
 });
 
+
 /**
- * POST /admin/users/:id/set-super-admin
- * Promote user to super admin
+ * GET /admin/orphaned-assets
+ * Lấy các tài sản của người dùng bị xóa
  */
-router.post('/users/:id/set-super-admin', async (req, res) => {
+router.get('/orphaned-assets', async (req, res) => {
   try {
-    const promoted = await setAsSuperAdmin(req.params.id);
-
-    // Log the action
-    await logAction({
-      actor_id: req.user.id,
-      action: 'PROMOTE_SUPER_ADMIN',
-      resource_type: 'USER',
-      resource_id: req.params.id,
-      company_id: req.user.company_id,
-      changes: { is_super_admin: true },
-    });
-
-    res.json({ message: 'User promoted to super admin', user: promoted });
+    const assets = await getOrphanedAssets();
+    res.json(assets);
   } catch (error) {
-    console.error('Error promoting user:', error);
+    console.error('Error fetching orphaned assets:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /admin/invitations
- * Create invitation for new user
+ * POST /admin/orphaned-assets/reassign
+ * Chuyển nhượng tài liệu của người đã bị xóa sang người dùng khác
  */
-router.post('/invitations', async (req, res) => {
+router.post('/orphaned-assets/reassign', async (req, res) => {
   try {
-    const { email, role } = req.body;
-
-    if (!email || !role) {
-      return res.status(400).json({ error: 'Email and role required' });
+    const { assetType, assetIds, newUserId } = req.body;
+    if (!assetType || !assetIds?.length || !newUserId) {
+      return res.status(400).json({ error: 'assetType, assetIds và newUserId là bắt buộc' });
     }
+    await reassignAssets(assetType, assetIds, newUserId);
 
-    const invitation = await createInvitation(email, role, req.user.id);
-
-    // Log the action
     await logAction({
       actor_id: req.user.id,
-      action: 'CREATE_INVITATION',
-      resource_type: 'INVITATION',
-      resource_id: invitation.id,
+      action: 'REASSIGN_ASSETS',
+      resource_type: assetType.toUpperCase(),
       company_id: req.user.company_id,
-      changes: { email, role },
+      changes: { assetIds, newUserId },
     });
 
-    // Generate invitation URL (frontend will handle this)
-    const invitationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/accept-invitation?token=${invitation.token}`;
-
-    res.json({
-      message: 'Lời mời đã được tạo',
-      invitation: {
-        id: invitation.id,
-        email: invitation.email,
-        role: invitation.role,
-        expiresAt: invitation.expires_at,
-        invitationUrl,
-      },
-    });
+    res.json({ message: 'Đã chuyển nhượng tài sản thành công' });
   } catch (error) {
-    console.error('Error creating invitation:', error);
+    console.error('Error reassigning assets:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * GET /admin/invitations
- * Get all pending invitations
+ * DELETE /admin/orphaned-assets
+ * Xóa vĩnh viễn tài liệu của người dùng bị xóa
  */
-router.get('/invitations', async (req, res) => {
+router.delete('/orphaned-assets', async (req, res) => {
   try {
-    const invitations = await getPendingInvitations();
+    const { assetType, assetIds } = req.body;
+    if (!assetType || !assetIds?.length) {
+      return res.status(400).json({ error: 'assetType và assetIds là bắt buộc' });
+    }
+    await deleteOrphanedAssets(assetType, assetIds);
 
-    res.json({
-      count: invitations.length,
-      invitations,
-    });
-  } catch (error) {
-    console.error('Error fetching invitations:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * DELETE /admin/invitations/:id
- * Cancel invitation
- */
-router.delete('/invitations/:id', async (req, res) => {
-  try {
-    await cancelInvitation(req.params.id);
-
-    // Log the action
     await logAction({
       actor_id: req.user.id,
-      action: 'CANCEL_INVITATION',
-      resource_type: 'INVITATION',
-      resource_id: req.params.id,
+      action: 'DELETE_ASSETS',
+      resource_type: assetType.toUpperCase(),
       company_id: req.user.company_id,
+      changes: { assetIds },
     });
 
-    res.json({ message: 'Lời mời đã bị hủy' });
+    res.json({ message: 'Đã xóa tài liệu thành công' });
   } catch (error) {
-    console.error('Error canceling invitation:', error);
+    console.error('Error deleting orphaned assets:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * GET /admin/audit-logs
- * Get audit logs with filters
+ * List audit logs with filters
  */
 router.get('/audit-logs', async (req, res) => {
   try {

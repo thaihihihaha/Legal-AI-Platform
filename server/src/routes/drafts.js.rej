@@ -1,8 +1,0 @@
---- server/src/routes/drafts.js
-+++ server/src/routes/drafts.js
-@@ -167,4 +167,4 @@
- router.patch('/:draftId', async (req, res) => {
-   try {
-     const { draftId } = req.params;
--    const { content, changeSummary } = req.body;
-+    const { content, title, changeSummary } = req.body;
