@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { generateTotpSecret, verifyTotpToken, enableTOTP } from '../services/twoFactorService.js';
 import {
@@ -14,6 +15,23 @@ import {
 } from '../services/tokenService.js';
 
 const router = Router();
+
+// Brute-force protection: 10 login attempts / 15 phút / IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Quá nhiều lần đăng nhập thất bại. Vui lòng thử lại sau 15 phút.' },
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Quá nhiều lần xác thực OTP. Vui lòng thử lại sau 15 phút.' },
+});
 
 // ─── Token Generation (kept for backward compatibility) ──────────────────────
 
@@ -31,7 +49,7 @@ router.post("/register", (req, res) => {
 });
 
 // Đăng nhập
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await prisma.user.findUnique({ where: { email } });
@@ -182,7 +200,7 @@ router.post('/verify-2fa-setup', async (req, res) => {
  * Verify OTP code trong quá trình login
  * Body: { otp_token, temp_session_token }
  */
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', otpLimiter, async (req, res) => {
   try {
     const { otp_token, temp_session_token } = req.body;
     if (!otp_token || !temp_session_token) {

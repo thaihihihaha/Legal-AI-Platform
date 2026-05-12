@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
 import { generateTotpSecret, verifyTotpToken, enableTOTP } from '../services/twoFactorService.js';
+import { revokeAllUserTokens } from '../services/tokenService.js';
 
 const router = Router();
 
@@ -50,8 +51,8 @@ router.post('/change-password', async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Mật khẩu hiện tại và mật khẩu mới là bắt buộc' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+    if (newPassword.length < 10) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 10 ký tự' });
     }
 
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
@@ -60,13 +61,16 @@ router.post('/change-password', async (req, res) => {
       return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng' });
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
       where: { id: req.user.id },
       data: { password_hash: passwordHash, updated_at: new Date() },
     });
 
-    res.json({ message: 'Đổi mật khẩu thành công' });
+    // Cắt mọi session cũ — buộc các thiết bị khác phải đăng nhập lại
+    await revokeAllUserTokens(req.user.id);
+
+    res.json({ message: 'Đổi mật khẩu thành công. Các phiên đăng nhập khác đã bị đăng xuất.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
