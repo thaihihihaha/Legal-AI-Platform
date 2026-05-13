@@ -75,14 +75,8 @@ export const ensureMvpTables = async () => {
     );
   `);
 
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_contracts_company_created ON contracts(company_id, created_at DESC);
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_contracts_company_expiry ON contracts(company_id, expiry_date);
-  `);
-
-  // Migrate existing contracts table nếu thiếu cột mới (ALTER TABLE IF NOT EXISTS không tồn tại trong PG)
+  // Migrate existing contracts table nếu thiếu cột mới — chạy TRƯỚC tạo index
+  // (table contracts có thể đã tồn tại từ init.sql mà thiếu các cột này)
   const contractCols = [
     `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS category_id      UUID REFERENCES categories(id) ON DELETE SET NULL`,
     `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS file_path        TEXT`,
@@ -101,6 +95,13 @@ export const ensureMvpTables = async () => {
   for (const sql of contractCols) {
     await prisma.$executeRawUnsafe(sql).catch(() => {}); // ignore if already exists
   }
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_contracts_company_created ON contracts(company_id, created_at DESC);
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_contracts_company_expiry ON contracts(company_id, expiry_date);
+  `);
 
   // ── ContractTag junction ──────────────────────────────────────────────────────
   await prisma.$executeRawUnsafe(`
