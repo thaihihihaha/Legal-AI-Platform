@@ -257,5 +257,5 @@ tool-legal/
 
 ## 10. Liên hệ
 
-Team: Mắt Bão UI/UX (`ts`) — quản lý qua workspace Coder.
+Team: Mat Bao Company
 Báo lỗi/đề xuất: dùng kênh nội bộ team.
