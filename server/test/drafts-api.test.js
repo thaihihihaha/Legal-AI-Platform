@@ -238,7 +238,7 @@ test('D12.1: Verify deleted draft returns 404', async () => {
     headers: { 'Authorization': `Bearer ${authToken}` },
   });
 
-  assert.equal(response.status, 500, 'Should return error for deleted draft');
+  assert.equal(response.status, 404, 'Should return 404 for deleted draft');
 });
 
 /**

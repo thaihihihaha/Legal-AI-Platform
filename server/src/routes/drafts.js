@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireDraftAccess } from '../middleware/requireDraftAccess.js';
 import {
   createDraftFromTemplate,
   getDraftsByUser,
@@ -135,7 +136,7 @@ router.get('/', async (req, res) => {
  * GET /v1/drafts/:draftId
  * Lấy chi tiết draft (content + research + validation)
  */
-router.get('/:draftId', async (req, res) => {
+router.get('/:draftId', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const userId = req.user.id;
@@ -164,7 +165,7 @@ router.get('/:draftId', async (req, res) => {
  *   changeSummary?: string  // Description của thay đổi
  * }
  */
-router.patch('/:draftId', async (req, res) => {
+router.patch('/:draftId', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { content, title, changeSummary } = req.body;
@@ -209,7 +210,7 @@ router.patch('/:draftId', async (req, res) => {
  * - Check legal compliance
  * - Return validation result + suggestions
  */
-router.post('/:draftId/validate', async (req, res) => {
+router.post('/:draftId/validate', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const userId = req.user.id;
@@ -245,7 +246,7 @@ router.post('/:draftId/validate', async (req, res) => {
  *   status: 'draft' | 'review' | 'approved' | 'signed'
  * }
  */
-router.post('/:draftId/status', async (req, res) => {
+router.post('/:draftId/status', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { status } = req.body;
@@ -281,7 +282,7 @@ router.post('/:draftId/status', async (req, res) => {
  *   format: 'docx' | 'pdf'  // default: docx
  * }
  */
-router.post('/:draftId/export', async (req, res) => {
+router.post('/:draftId/export', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { format = 'docx' } = req.query;
@@ -336,7 +337,7 @@ router.post('/:draftId/export', async (req, res) => {
  * GET /v1/drafts/:draftId/versions
  * Lấy history các version của draft
  */
-router.get('/:draftId/versions', async (req, res) => {
+router.get('/:draftId/versions', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
 
@@ -359,9 +360,17 @@ router.get('/:draftId/versions', async (req, res) => {
  * DELETE /v1/drafts/:draftId
  * Delete draft (cascade delete all versions)
  */
-router.delete('/:draftId', async (req, res) => {
+router.delete('/:draftId', requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
+
+    // Chỉ chủ draft hoặc admin mới được xóa (giống pattern contracts.js/documents.js)
+    if (req.draftAccessRole !== 'owner' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Chỉ chủ draft hoặc admin mới có quyền xóa.',
+      });
+    }
 
     await deleteDraft(draftId);
 

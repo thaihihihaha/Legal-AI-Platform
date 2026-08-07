@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requireDraftAccess } from '../middleware/requireDraftAccess.js';
 import * as reviewService from '../services/reviewService.js';
 import * as collaborationService from '../services/collaborationService.js';
 import * as complianceService from '../services/complianceService.js';
@@ -15,7 +16,7 @@ const router = express.Router();
 /**
  * POST /v1/reviews - Create a new review session
  */
-router.post('/reviews', requireAuth, async (req, res) => {
+router.post('/reviews', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId, reviewType = 'standard', dueDate = null, notes = '' } = req.body;
     const userId = req.user.id;
@@ -51,7 +52,7 @@ router.post('/reviews', requireAuth, async (req, res) => {
 /**
  * GET /v1/reviews/:draftId - Get review session details
  */
-router.get('/reviews/:draftId', requireAuth, async (req, res) => {
+router.get('/reviews/:draftId', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
 
@@ -80,7 +81,7 @@ router.get('/reviews/:draftId', requireAuth, async (req, res) => {
 /**
  * POST /v1/reviews/:draftId/comments - Add a review comment
  */
-router.post('/reviews/:draftId/comments', requireAuth, async (req, res) => {
+router.post('/reviews/:draftId/comments', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { sessionId, content, clauseReference, commentType = 'comment', severity = 'info' } = req.body;
@@ -119,7 +120,7 @@ router.post('/reviews/:draftId/comments', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/risk-assessment - Perform risk assessment
  */
-router.post('/drafts/:draftId/risk-assessment', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/risk-assessment', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const userId = req.user.id;
@@ -142,7 +143,7 @@ router.post('/drafts/:draftId/risk-assessment', requireAuth, async (req, res) =>
 /**
  * POST /v1/reviews/:draftId/approve - Approve a draft review
  */
-router.post('/reviews/:draftId/approve', requireAuth, async (req, res) => {
+router.post('/reviews/:draftId/approve', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { sessionId, notes = '' } = req.body;
@@ -173,7 +174,7 @@ router.post('/reviews/:draftId/approve', requireAuth, async (req, res) => {
 /**
  * POST /v1/reviews/:draftId/reject - Reject a draft review
  */
-router.post('/reviews/:draftId/reject', requireAuth, async (req, res) => {
+router.post('/reviews/:draftId/reject', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { sessionId, reasons = [] } = req.body;
@@ -206,7 +207,9 @@ router.post('/reviews/:draftId/reject', requireAuth, async (req, res) => {
  */
 router.get('/reviews/stats/:companyId', requireAuth, async (req, res) => {
   try {
-    const { companyId } = req.params;
+    // Không tin companyId từ URL — luôn dùng company của chính user đăng nhập,
+    // tránh lộ thống kê review của công ty khác (IDOR).
+    const companyId = req.user.companyId;
 
     const stats = await reviewService.getReviewStatistics(companyId);
 
@@ -228,7 +231,7 @@ router.get('/reviews/stats/:companyId', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/share - Share a draft with another user
  */
-router.post('/drafts/:draftId/share', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/share', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { userId, role = 'viewer', expiresAt = null } = req.body;
@@ -265,7 +268,7 @@ router.post('/drafts/:draftId/share', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/revoke-access - Revoke draft access
  */
-router.post('/drafts/:draftId/revoke-access', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/revoke-access', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { userId } = req.body;
@@ -296,7 +299,7 @@ router.post('/drafts/:draftId/revoke-access', requireAuth, async (req, res) => {
 /**
  * GET /v1/drafts/:draftId/collaborators - Get draft collaborators
  */
-router.get('/drafts/:draftId/collaborators', requireAuth, async (req, res) => {
+router.get('/drafts/:draftId/collaborators', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
 
@@ -318,7 +321,7 @@ router.get('/drafts/:draftId/collaborators', requireAuth, async (req, res) => {
 /**
  * GET /v1/drafts/:draftId/activity - Get activity log
  */
-router.get('/drafts/:draftId/activity', requireAuth, async (req, res) => {
+router.get('/drafts/:draftId/activity', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { limit = 50 } = req.query;
@@ -366,7 +369,7 @@ router.get('/shared-drafts', requireAuth, async (req, res) => {
 /**
  * GET /v1/drafts/:draftId/audit-trail - Get audit trail
  */
-router.get('/drafts/:draftId/audit-trail', requireAuth, async (req, res) => {
+router.get('/drafts/:draftId/audit-trail', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { limit = 100 } = req.query;
@@ -389,7 +392,7 @@ router.get('/drafts/:draftId/audit-trail', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/sign - Record digital signature
  */
-router.post('/drafts/:draftId/sign', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/sign', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { signatureData, signatureMethod = 'timestamp' } = req.body;
@@ -425,7 +428,7 @@ router.post('/drafts/:draftId/sign', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/legal-hold - Apply legal hold
  */
-router.post('/drafts/:draftId/legal-hold', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/legal-hold', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { reason, expiryDate = null, caseNumber = null } = req.body;
@@ -462,7 +465,7 @@ router.post('/drafts/:draftId/legal-hold', requireAuth, async (req, res) => {
 /**
  * GET /v1/drafts/:draftId/legal-holds - Get legal holds
  */
-router.get('/drafts/:draftId/legal-holds', requireAuth, async (req, res) => {
+router.get('/drafts/:draftId/legal-holds', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
 
@@ -484,7 +487,7 @@ router.get('/drafts/:draftId/legal-holds', requireAuth, async (req, res) => {
 /**
  * POST /v1/drafts/:draftId/compliance-check - Check compliance
  */
-router.post('/drafts/:draftId/compliance-check', requireAuth, async (req, res) => {
+router.post('/drafts/:draftId/compliance-check', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
     const { standardName, jurisdiction = null } = req.body;
@@ -520,7 +523,7 @@ router.post('/drafts/:draftId/compliance-check', requireAuth, async (req, res) =
 /**
  * GET /v1/drafts/:draftId/compliance - Get compliance checks
  */
-router.get('/drafts/:draftId/compliance', requireAuth, async (req, res) => {
+router.get('/drafts/:draftId/compliance', requireAuth, requireDraftAccess(), async (req, res) => {
   try {
     const { draftId } = req.params;
 
@@ -544,7 +547,9 @@ router.get('/drafts/:draftId/compliance', requireAuth, async (req, res) => {
  */
 router.get('/compliance-report/:companyId', requireAuth, async (req, res) => {
   try {
-    const { companyId } = req.params;
+    // Không tin companyId từ URL — luôn dùng company của chính user đăng nhập,
+    // tránh lộ báo cáo compliance của công ty khác (IDOR).
+    const companyId = req.user.companyId;
 
     const report = await complianceService.getComplianceReport(companyId);
 
