@@ -5,7 +5,6 @@
 ## 1. Tóm tắt sản phẩm
 
 **Tên**: Legal AI Platform (`tool-legal`)
-**Domain**: legalmb.cloud
 **Mục tiêu**: Nền tảng SaaS multi-tenant hỗ trợ doanh nghiệp số hoá nghiệp vụ pháp lý — quản lý hợp đồng/tài liệu, tra cứu pháp lý bằng AI có dẫn chiếu, soạn thảo theo template, review rủi ro tự động, phê duyệt nội bộ + ký số + compliance check.
 
 ## 2. Vấn đề giải quyết

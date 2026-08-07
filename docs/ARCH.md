@@ -199,7 +199,7 @@ Chi tiết: `server/prisma/schema.prisma`.
 Project hiện tại **lệch template chuẩn Mắt Bão** (giống `dashboard-omicall`):
 - KHÔNG có Next.js/MariaDB — dùng split React+Vite + Express+Postgres
 - KHÔNG có Docker compose / Coolify deploy
-- Deploy custom qua Plesk → `legalmb.cloud`
+- Deploy custom qua Plesk (tên miền production tùy môi trường triển khai)
 - `docs/skills-lock.json` cho thấy đã dùng skill `accessibility`, `frontend-design`, `seo` từ external pack
 
 Theo AI Factory pipeline, project đang ở **Phase 3 — Productization** (đã có Plesk deploy, security harden, helmet, rate-limit). Migration sang Coolify cần Dockerfile multi-stage (xem feedback `coolify-compose-broken`).

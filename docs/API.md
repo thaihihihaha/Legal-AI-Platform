@@ -2,7 +2,7 @@
 
 <!-- AUTO-GENERATED: do not edit -->
 
-Base URL: `http://localhost:8080` (dev) · `https://legalmb.cloud` (prod)
+Base URL: `http://localhost:8080` (dev) · tên miền production tùy môi trường triển khai
 API version prefix: `/v1`
 
 ## Conventions

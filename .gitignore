@@ -6,7 +6,9 @@ server/node_modules/
 # Environment variables (chứa secrets — KHÔNG commit)
 server/.env
 client/.env
+client/.env.production
 .env
+.env.production
 
 # Build output
 client/dist/

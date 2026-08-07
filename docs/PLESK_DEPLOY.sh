@@ -2,7 +2,7 @@
 
 # ============================================
 # Plesk Deployment Script
-# Hướng dẫn deploy lên Plesk cho legalmb.cloud
+# Hướng dẫn deploy lên Plesk
 # ============================================
 
 echo "🚀 Bắt đầu deploy lên Plesk..."
@@ -40,13 +40,13 @@ echo ""
 echo "4. Cấu hình Environment Variables trong Plesk:"
 echo "   APP_PORT=8080"
 echo "   NODE_ENV=production"
-echo "   FRONTEND_URL=https://legalmb.cloud"
-echo "   CORS_ORIGINS=https://legalmb.cloud"
+echo "   FRONTEND_URL=<ten-mien-production-cua-ban>"
+echo "   CORS_ORIGINS=<ten-mien-production-cua-ban>"
 echo "   DATABASE_URL=<your-db-url>"
 echo "   JWT_SECRET=<secure-secret>"
 echo "   SESSION_SECRET=<secure-secret>"
 echo ""
 echo "5. Khởi động Node.js application"
-echo "6. Kiểm tra: curl https://legalmb.cloud/v1/health"
+echo "6. Kiểm tra: curl https://<ten-mien-production-cua-ban>/v1/health"
 echo ""
 echo "🎉 Deploy hoàn tất!"
