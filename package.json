@@ -1,0 +1,9 @@
+{
+  "name": "legal-ai-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo: client (React/Vite) + server (Express/Prisma). Manifest ở gốc để nền tảng triển khai nhận diện được ứng dụng — nhận diện chỉ đọc package.json/requirements.txt/go.mod/index.html, Dockerfile KHÔNG tính là tín hiệu framework.",
+  "scripts": {
+    "start": "node server/index.js"
+  }
+}
