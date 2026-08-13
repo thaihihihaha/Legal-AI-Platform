@@ -36,3 +36,12 @@ Thumbs.db
 
 # Prisma generated
 server/node_modules/.prisma/
+
+# Thông tin đăng nhập git (chứa access token còn sống — KHÔNG commit)
+# Kho này công khai trên GitHub: token lọt vào một lần commit là lộ vĩnh viễn,
+# xoá ở lần commit sau KHÔNG gỡ được vì nó vẫn nằm trong lịch sử.
+.git-credentials
+.git-credentials/
+~/
+*.token
+*.pat
