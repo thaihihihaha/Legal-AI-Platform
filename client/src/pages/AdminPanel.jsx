@@ -17,7 +17,7 @@ import { fetchWithAuth } from '../utils/fetchWithAuth.js';
 import PageHero from '../components/ui/PageHero';
 import './admin-panel.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('users');

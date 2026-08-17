@@ -10,7 +10,7 @@ import CategoryTree from '../components/shared/CategoryTree';
 import TagSelector from '../components/shared/TagSelector';
 import { fetchWithAuth } from '../utils/fetchWithAuth.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 function getToken() {
   return localStorage.getItem('longpl_token');

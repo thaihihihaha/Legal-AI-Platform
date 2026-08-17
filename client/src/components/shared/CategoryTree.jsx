@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Plus, Pencil, Trash2, Folder, FolderOpen, X, Check } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const COLORS = [
   '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',

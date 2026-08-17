@@ -5,7 +5,7 @@ import axios from 'axios';
  * Xử lý tất cả authentication logic: login, logout, token refresh, user profile, etc
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/v1';
 
 class AuthService {
   /**

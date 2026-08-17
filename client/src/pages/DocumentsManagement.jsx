@@ -3,7 +3,7 @@ import { Search, Download, Trash2, Eye, Grid3x3, List, ChevronUp, ChevronDown, X
 import PageHero from '../components/ui/PageHero';
 import '../components/modal.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const CONTRACT_TYPE_LABELS = {
   hop_dong_lao_dong: 'Lao động',

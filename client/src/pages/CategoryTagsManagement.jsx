@@ -5,7 +5,7 @@ import {
 import CategoryTree from '../components/shared/CategoryTree.jsx';
 import PageHero from '../components/ui/PageHero';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const TAG_COLORS = [
   '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',

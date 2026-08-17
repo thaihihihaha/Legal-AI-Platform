@@ -31,7 +31,7 @@ import { setUser as setReduxUser, clearAuth } from './store/slices/authSlice.js'
 import './App.css';
 import './styles/management-pages.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 function AuthScreen({ form, setForm, onSubmit, pending }) {
   return (

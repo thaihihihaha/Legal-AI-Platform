@@ -6,7 +6,7 @@ import loggingService from './loggingService';
  * Configure axios with interceptors for error handling, logging, and token management
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/v1';
 
 // Create axios instance
 const apiClient = axios.create({
