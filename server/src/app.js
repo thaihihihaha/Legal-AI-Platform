@@ -23,7 +23,7 @@ import { validateEnv, getCorsOrigins } from './config/env.js';
 import { requireAuth } from './middleware/auth.js';
 import { requireSuperAdmin, requireActive } from './middleware/requireRole.js';
 import { getPrismaHealth } from './lib/prisma.js';
-import { ensureMvpTables } from './lib/bootstrap.js';
+import { ensureMvpTables, ensureFirstAdmin } from './lib/bootstrap.js';
 import { UPLOAD_DIR } from './config/storage.js';
 
 dotenv.config();
@@ -34,7 +34,17 @@ envCheck.optionalWarnings.forEach((warning) => console.warn(`⚠️ ${warning}`)
 // Khởi động Trí tuệ Nhân tạo
 initAI();
 await initPinecone();
-await ensureMvpTables();
+
+// Lỗi ở tầng lược đồ KHÔNG được phép giết tiến trình. File này dùng top-level await: một promise
+// bị reject ở đây làm hỏng việc đánh giá module ESM ⇒ `import app` trong index.js cũng reject ⇒
+// node thoát mã 1 ⇒ crash-loop, không phục vụ nổi /v1/health lẫn trang React tĩnh (express.static
+// nằm ngay bên dưới). Với một MẪU DỰ ÁN thì đó là đánh đổi không chấp nhận được.
+try {
+  await ensureMvpTables();
+  await ensureFirstAdmin();
+} catch (error) {
+  console.error('[bootstrap] Khởi tạo lược đồ THẤT BẠI — app vẫn lên để còn chẩn đoán:', error);
+}
 
 const app = express();
 

@@ -1,4 +1,6 @@
-const REQUIRED_ENV_KEYS = ['DATABASE_URL', 'JWT_SECRET'];
+import crypto from 'node:crypto';
+
+const REQUIRED_ENV_KEYS = ['DATABASE_URL'];
 
 export const validateEnv = () => {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]);
@@ -8,6 +10,18 @@ export const validateEnv = () => {
   }
 
   const optionalWarnings = [];
+
+  // JWT_SECRET KHÔNG còn nằm trong REQUIRED_ENV_KEYS: .env.example ở GỐC repo — thứ duy nhất
+  // bản quét tự-cấu-hình của nền tảng đọc — trước đây không khai biến này. Ném lỗi ở đây khiến
+  // deploy-từ-mẫu chết ngay tại app.js:31, trước cả khi chạm tới CSDL. Sinh khoá TẠM để app còn
+  // lên được và còn xem được log.
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = crypto.randomBytes(48).toString('hex');
+    optionalWarnings.push(
+      'JWT_SECRET chưa cấu hình — đã sinh khoá TẠM. Mọi phiên đăng nhập sẽ mất khi khởi động lại. Hãy đặt JWT_SECRET.'
+    );
+  }
+
   if (!process.env.AZURE_OPENAI_API_KEY) {
     optionalWarnings.push('AZURE_OPENAI_API_KEY not configured. AI features will be disabled.');
   }

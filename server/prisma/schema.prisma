@@ -11,16 +11,30 @@ datasource db {
   url        = env("DATABASE_URL")
 }
 
+// @@map là BẮT BUỘC: Postgres đặt tên type là plan_type / user_role (database/init.sql), còn Prisma
+// mặc định đi tìm type trùng tên model là "PlanType" / "UserRole". Thiếu @@map thì mọi thao tác GHI
+// hoặc LỌC theo enum nổ 42704 `type "public.UserRole" does not exist` — đã đo trên Postgres thật:
+// user.create({role}) và user.findMany({where:{role}}) đều FAIL, sau khi thêm @@map thì OK.
+// Đọc thì không nổ vì Prisma ép `"role"::text`, nên lỗi này ẩn cho tới lúc tạo/lọc người dùng.
 enum PlanType {
   trial
   starter
   pro
   enterprise
+
+  @@map("plan_type")
 }
 
+// Phải khai ĐỦ 5 nhãn đúng như enum trong CSDL. Trước đây chỉ có admin/member, nên một người dùng
+// role 'owner' | 'viewer' | 'superadmin' sẽ làm Prisma lỗi chuyển đổi giá trị khi đọc.
 enum UserRole {
+  owner
   admin
   member
+  viewer
+  superadmin
+
+  @@map("user_role")
 }
 
 model Company {

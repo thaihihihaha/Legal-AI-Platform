@@ -40,7 +40,10 @@ if [ -n "$DATABASE_URL" ]; then
     if ! psql "$PG_URL" -tAc "SELECT to_regclass('public.companies')" 2>/dev/null | grep -q companies; then
       echo "[init] ✗ Khởi tạo lược đồ THẤT BẠI — không tạo được bảng companies:"
       grep -E "ERROR" /tmp/init.log | head -10
-      exit 1
+      # KHÔNG exit: dòng cuối tệp này là `exec node index.js`, và `set -e` ở đầu tệp khiến exit 1
+      # thành container không bao giờ khởi động. App vẫn phải lên để còn phục vụ /v1/health, trang
+      # React tĩnh và log chẩn đoán. ensureAuthSchema() trong bootstrap.js cũng chịu lỗi từng câu.
+      echo "[init] Vẫn khởi động app để còn xem log và /v1/health."
     fi
     errs=$(grep -cE "^psql:.*ERROR" /tmp/init.log || true)
     if [ "${errs:-0}" -gt 0 ]; then
